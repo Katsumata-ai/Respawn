@@ -8,6 +8,7 @@ import DownloadProgressModal from '../components/DownloadProgressModal';
 interface DownloadResult {
   success: boolean;
   videoId?: string;
+  title?: string;
   watchUrl?: string;
   message?: string;
   error?: string;
@@ -167,6 +168,7 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
       setResult({
         success: true,
         videoId: data.videoId,
+        title: title.trim(),
         watchUrl: `${window.location.origin}/watch/${data.videoId}`,
         message: data.message,
       });
@@ -362,7 +364,7 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
       <DownloadProgressModal
         isOpen={showDownloadModal}
         videoId={result?.videoId || ''}
-        videoTitle={result?.videoId ? 'Video' : ''}
+        videoTitle={result?.title || 'Video'}
         onClose={() => setShowDownloadModal(false)}
       />
 
