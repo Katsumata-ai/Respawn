@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Download, X, HelpCircle } from 'lucide-react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 interface DownloadProgressModalProps {
   isOpen: boolean;
@@ -23,6 +25,9 @@ export default function DownloadProgressModal({
   const [isDownloading, setIsDownloading] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
   const [showEstimateTooltip, setShowEstimateTooltip] = useState(false);
+
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
 
   // Smooth progress animation with interpolation
   useEffect(() => {
@@ -68,12 +73,52 @@ export default function DownloadProgressModal({
     const abortController = new AbortController();
     let isMounted = true;
 
+    // Load FFmpeg
+    const loadFFmpeg = async () => {
+      if (ffmpegLoaded && ffmpegRef.current) {
+        return ffmpegRef.current;
+      }
+
+      console.log('[Download] Loading FFmpeg.wasm...');
+      setStatus('Loading video processor (first time only)...');
+      setProgress(5);
+
+      const ffmpeg = new FFmpeg();
+
+      ffmpeg.on('log', ({ message }) => {
+        console.log('[FFmpeg]', message);
+      });
+
+      ffmpeg.on('progress', ({ progress: ffmpegProgress }) => {
+        // FFmpeg progress is 0-1, map to 85-95%
+        const mappedProgress = 85 + (ffmpegProgress * 10);
+        setProgress(mappedProgress);
+        console.log(`[FFmpeg] Processing: ${(ffmpegProgress * 100).toFixed(1)}%`);
+      });
+
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+
+      ffmpegRef.current = ffmpeg;
+      setFfmpegLoaded(true);
+      console.log('[Download] FFmpeg loaded successfully');
+
+      return ffmpeg;
+    };
+
     const startDownload = async () => {
       console.log(`[Download] Starting fresh download for video: ${videoId}`);
 
       try {
+        // Load FFmpeg first
+        await loadFFmpeg();
+
         // Get the Mux URL from the server
         setStatus('Preparing download...');
+        setProgress(10);
         console.log(`[Download] Fetching Mux URL from /api/download-to-library/${videoId}`);
 
         const response = await fetch(`/api/download-to-library/${videoId}`, {
@@ -111,52 +156,66 @@ export default function DownloadProgressModal({
         const playlistText = await playlistResponse.text();
         console.log(`[Download] Playlist fetched, size: ${playlistText.length} bytes`);
 
-        // Parse the playlist to get rendition URLs (variant playlists)
+        // Parse the playlist to get video renditions and audio track
         const lines = playlistText.split('\n');
-        const renditions: string[] = [];
+        const videoRenditions: string[] = [];
+        let audioRenditionUrl: string | null = null;
 
-        for (const line of lines) {
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+
+          // Look for audio track
+          if (line.startsWith('#EXT-X-MEDIA:TYPE=AUDIO')) {
+            const uriMatch = line.match(/URI="([^"]+)"/);
+            if (uriMatch) {
+              audioRenditionUrl = uriMatch[1];
+              console.log(`[Download] Found audio track: ${audioRenditionUrl.substring(0, 100)}...`);
+            }
+            continue;
+          }
+
+          // Look for video renditions
           if (line && !line.startsWith('#') && line.includes('rendition.m3u8')) {
-            renditions.push(line);
+            videoRenditions.push(line);
           }
         }
 
-        console.log(`[Download] Found ${renditions.length} renditions`);
+        console.log(`[Download] Found ${videoRenditions.length} video renditions`);
+        console.log(`[Download] Found audio track: ${audioRenditionUrl ? 'YES' : 'NO'}`);
 
-        if (renditions.length === 0) {
-          throw new Error('No renditions found in HLS playlist');
+        if (videoRenditions.length === 0) {
+          throw new Error('No video renditions found in HLS playlist');
         }
 
-        // Download the first (best quality) rendition playlist
-        const renditionUrl = renditions[0];
-        console.log(`[Download] Downloading rendition: ${renditionUrl.substring(0, 100)}...`);
+        // Download the first (best quality) video rendition playlist
+        const videoRenditionUrl = videoRenditions[0];
+        console.log(`[Download] Downloading video rendition: ${videoRenditionUrl.substring(0, 100)}...`);
 
-        const renditionResponse = await fetch(renditionUrl, {
+        const videoRenditionResponse = await fetch(videoRenditionUrl, {
           signal: abortController.signal,
         });
 
-        if (!renditionResponse.ok) {
-          throw new Error(`Failed to fetch rendition: ${renditionResponse.status}`);
+        if (!videoRenditionResponse.ok) {
+          throw new Error(`Failed to fetch video rendition: ${videoRenditionResponse.status}`);
         }
 
-        const renditionText = await renditionResponse.text();
-        console.log(`[Download] Rendition fetched, size: ${renditionText.length} bytes`);
+        const videoRenditionText = await videoRenditionResponse.text();
+        console.log(`[Download] Video rendition fetched, size: ${videoRenditionText.length} bytes`);
 
-        // Parse the rendition to get initialization segment and media segments
-        // Mux uses .m4s (MPEG-4 Segment) format with an initialization segment
-        const renditionLines = renditionText.split('\n');
-        let initSegmentUrl: string | null = null;
-        const segments: string[] = [];
+        // Parse the video rendition to get initialization segment and media segments
+        const videoRenditionLines = videoRenditionText.split('\n');
+        let videoInitSegmentUrl: string | null = null;
+        const videoSegments: string[] = [];
 
-        for (let i = 0; i < renditionLines.length; i++) {
-          const line = renditionLines[i].trim();
+        for (let i = 0; i < videoRenditionLines.length; i++) {
+          const line = videoRenditionLines[i].trim();
 
           // Look for initialization segment (EXT-X-MAP)
           if (line.startsWith('#EXT-X-MAP:')) {
             const uriMatch = line.match(/URI="([^"]+)"/);
             if (uriMatch) {
-              initSegmentUrl = uriMatch[1];
-              console.log(`[Download] Found init segment: ${initSegmentUrl.substring(0, 100)}...`);
+              videoInitSegmentUrl = uriMatch[1];
+              console.log(`[Download] Found video init segment`);
             }
             continue;
           }
@@ -166,83 +225,200 @@ export default function DownloadProgressModal({
             continue;
           }
 
-          // Look for .m4s segment files (Mux uses MPEG-4 segments)
+          // Look for .m4s segment files
           if (line.includes('.m4s')) {
-            segments.push(line);
+            videoSegments.push(line);
           }
         }
 
-        console.log(`[Download] Found init segment: ${initSegmentUrl ? 'YES' : 'NO'}`);
-        console.log(`[Download] Found ${segments.length} media segments in rendition`);
+        console.log(`[Download] Found ${videoSegments.length} video segments`);
 
-        if (!initSegmentUrl) {
-          throw new Error('No initialization segment found in rendition playlist');
+        if (!videoInitSegmentUrl) {
+          throw new Error('No video initialization segment found');
         }
 
-        if (segments.length === 0) {
-          throw new Error('No video segments found in rendition playlist');
+        if (videoSegments.length === 0) {
+          throw new Error('No video segments found');
         }
 
-        // Download initialization segment first
+        // Parse audio rendition if available
+        let audioInitSegmentUrl: string | null = null;
+        const audioSegments: string[] = [];
+
+        if (audioRenditionUrl) {
+          console.log(`[Download] Downloading audio rendition...`);
+          const audioRenditionResponse = await fetch(audioRenditionUrl, {
+            signal: abortController.signal,
+          });
+
+          if (audioRenditionResponse.ok) {
+            const audioRenditionText = await audioRenditionResponse.text();
+            const audioRenditionLines = audioRenditionText.split('\n');
+
+            for (const line of audioRenditionLines) {
+              const trimmedLine = line.trim();
+
+              if (trimmedLine.startsWith('#EXT-X-MAP:')) {
+                const uriMatch = trimmedLine.match(/URI="([^"]+)"/);
+                if (uriMatch) {
+                  audioInitSegmentUrl = uriMatch[1];
+                  console.log(`[Download] Found audio init segment`);
+                }
+                continue;
+              }
+
+              if (!trimmedLine || trimmedLine.startsWith('#')) {
+                continue;
+              }
+
+              if (trimmedLine.includes('.m4s')) {
+                audioSegments.push(trimmedLine);
+              }
+            }
+
+            console.log(`[Download] Found ${audioSegments.length} audio segments`);
+          } else {
+            console.warn(`[Download] Failed to fetch audio rendition, continuing without audio`);
+          }
+        }
+
+        // Download video track
         if (!isMounted) return;
-        setStatus('Downloading initialization segment...');
-        setProgress(30);
+        setStatus('Downloading video track...');
+        setProgress(15);
 
-        console.log(`[Download] Downloading init segment: ${initSegmentUrl.substring(0, 100)}...`);
-        const initResponse = await fetch(initSegmentUrl, {
+        console.log(`[Download] Downloading video init segment`);
+        const videoInitResponse = await fetch(videoInitSegmentUrl, {
           signal: abortController.signal,
         });
 
-        if (!initResponse.ok) {
-          throw new Error(`Failed to download initialization segment: ${initResponse.status}`);
+        if (!videoInitResponse.ok) {
+          throw new Error(`Failed to download video init segment: ${videoInitResponse.status}`);
         }
 
-        const initBuffer = await initResponse.arrayBuffer();
-        console.log(`[Download] Init segment downloaded, size: ${initBuffer.byteLength} bytes`);
+        const videoInitBuffer = await videoInitResponse.arrayBuffer();
+        const videoChunks: ArrayBuffer[] = [videoInitBuffer];
 
-        // Download all media segments
-        if (!isMounted) return;
-        setStatus('Downloading video segments...');
-        setProgress(35);
-
-        const chunks: ArrayBuffer[] = [initBuffer]; // Start with init segment
-
-        for (let i = 0; i < segments.length; i++) {
+        for (let i = 0; i < videoSegments.length; i++) {
           if (!isMounted) return;
 
-          const segmentUrl = segments[i];
-          console.log(`[Download] Downloading segment ${i + 1}/${segments.length}: ${segmentUrl}`);
+          const segmentUrl = videoSegments[i];
+          console.log(`[Download] Downloading video segment ${i + 1}/${videoSegments.length}`);
 
           const segmentResponse = await fetch(segmentUrl, {
             signal: abortController.signal,
           });
 
           if (!segmentResponse.ok) {
-            console.warn(`[Download] Failed to download segment ${i}, status: ${segmentResponse.status}`);
-            continue; // Skip failed segments
+            console.warn(`[Download] Failed to download video segment ${i}`);
+            continue;
           }
 
           const buffer = await segmentResponse.arrayBuffer();
-          chunks.push(buffer);
+          videoChunks.push(buffer);
 
-          // Update progress (35% to 95%)
-          const segmentProgress = 35 + (i / segments.length) * 60;
+          // Update progress (15% to 45%)
+          const segmentProgress = 15 + (i / videoSegments.length) * 30;
           setProgress(segmentProgress);
         }
 
-        if (chunks.length <= 1) {
-          throw new Error('Failed to download any video segments');
+        const videoBlob = new Blob(videoChunks, { type: 'video/mp4' });
+        console.log(`[Download] Video track downloaded, size: ${videoBlob.size} bytes`);
+
+        // Download audio track if available
+        let audioBlob: Blob | null = null;
+
+        if (audioInitSegmentUrl && audioSegments.length > 0) {
+          if (!isMounted) return;
+          setStatus('Downloading audio track...');
+          setProgress(45);
+
+          console.log(`[Download] Downloading audio init segment`);
+          const audioInitResponse = await fetch(audioInitSegmentUrl, {
+            signal: abortController.signal,
+          });
+
+          if (audioInitResponse.ok) {
+            const audioInitBuffer = await audioInitResponse.arrayBuffer();
+            const audioChunks: ArrayBuffer[] = [audioInitBuffer];
+
+            for (let i = 0; i < audioSegments.length; i++) {
+              if (!isMounted) return;
+
+              const segmentUrl = audioSegments[i];
+              console.log(`[Download] Downloading audio segment ${i + 1}/${audioSegments.length}`);
+
+              const segmentResponse = await fetch(segmentUrl, {
+                signal: abortController.signal,
+              });
+
+              if (!segmentResponse.ok) {
+                console.warn(`[Download] Failed to download audio segment ${i}`);
+                continue;
+              }
+
+              const buffer = await segmentResponse.arrayBuffer();
+              audioChunks.push(buffer);
+
+              // Update progress (45% to 75%)
+              const segmentProgress = 45 + (i / audioSegments.length) * 30;
+              setProgress(segmentProgress);
+            }
+
+            audioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
+            console.log(`[Download] Audio track downloaded, size: ${audioBlob.size} bytes`);
+          }
         }
 
-        // Combine chunks into single blob
+        // Merge video and audio with FFmpeg
         if (!isMounted) return;
-        setStatus('Finalizing download...');
-        setProgress(95);
+        setStatus('Merging video and audio...');
+        setProgress(80);
 
-        const blob = new Blob(chunks as BlobPart[], { type: 'video/mp4' });
-        console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
+        const ffmpeg = ffmpegRef.current!;
+
+        // Write video file
+        await ffmpeg.writeFile('video.m4v', await fetchFile(videoBlob));
+        console.log('[Download] Video file written to FFmpeg');
+
+        let outputFile = 'output.mp4';
+
+        if (audioBlob) {
+          // Write audio file
+          await ffmpeg.writeFile('audio.m4a', await fetchFile(audioBlob));
+          console.log('[Download] Audio file written to FFmpeg');
+
+          // Merge video and audio
+          console.log('[Download] Merging video and audio with FFmpeg...');
+          await ffmpeg.exec(['-i', 'video.m4v', '-i', 'audio.m4a', '-c', 'copy', outputFile]);
+        } else {
+          // Video only
+          console.log('[Download] Processing video only (no audio track)...');
+          await ffmpeg.exec(['-i', 'video.m4v', '-c', 'copy', outputFile]);
+        }
+
+        // Read the output file
+        const outputData = await ffmpeg.readFile(outputFile);
+        const blob = new Blob([new Uint8Array(outputData as Uint8Array)], { type: 'video/mp4' });
+        console.log(`[Download] Final file created, size: ${blob.size} bytes`);
+
+        // Cleanup FFmpeg files
+        try {
+          await ffmpeg.deleteFile('video.m4v');
+          if (audioBlob) {
+            await ffmpeg.deleteFile('audio.m4a');
+          }
+          await ffmpeg.deleteFile(outputFile);
+          console.log('[Download] FFmpeg files cleaned up');
+        } catch (e) {
+          console.warn('[Download] Failed to cleanup FFmpeg files:', e);
+        }
 
         // Trigger download
+        if (!isMounted) return;
+        setStatus('Starting download...');
+        setProgress(95);
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -266,7 +442,7 @@ export default function DownloadProgressModal({
         if (isMounted) {
           setStatus('Download complete! ✓');
           setProgress(100);
-          console.log(`[Download] Download complete!`);
+          console.log(`[Download] Download complete with ${audioBlob ? 'audio' : 'video only'}!`);
 
           setTimeout(() => {
             if (isMounted) {
