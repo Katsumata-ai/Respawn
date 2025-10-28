@@ -28,7 +28,8 @@ export const S3_BUCKET_NAME = process.env.AWS_S3_BUCKET || '';
 export const S3_REGION = process.env.AWS_S3_REGION || 'us-east-1';
 
 // API Configuration
-export const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ||
+                            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 export const API_TIMEOUT = 30000; // 30 seconds
 
 // Error Messages

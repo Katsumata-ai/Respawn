@@ -51,8 +51,9 @@ export class DownloadService {
       });
       console.log('Metadata saved successfully');
 
-      // Generate URLs
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      // Generate URLs - use Vercel production URL in production
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+                      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
       const watchUrl = `${baseUrl}/watch/${videoId}`;
 
       console.log('Quick link created successfully');
@@ -216,8 +217,10 @@ export class DownloadService {
       this.downloader.cleanupTempFile(filePath);
       console.log('Step 5 completed');
 
-      // Generate URLs
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      // Generate URLs - use Vercel production URL in production
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+                      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
+                      'http://localhost:3000';
       const viewUrl = `${baseUrl}/watch/${videoId}`;
       const downloadUrl = `${baseUrl}/api/download/${videoId}`;
 
