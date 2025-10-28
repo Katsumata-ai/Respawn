@@ -45,11 +45,13 @@ export function middleware(request: NextRequest) {
     if (headerToken) {
       tokenAdded = true;
       console.log('[Middleware] ✅ Token already in headers');
+      console.log('[Middleware] Token preview:', headerToken.substring(0, 50) + '...');
     }
   }
 
   if (!tokenAdded) {
     console.log('[Middleware] ⚠️ No token found');
+    console.log('[Middleware] Available headers:', Array.from(request.headers.entries()).map(([k]) => k).join(', '));
   }
 
   return NextResponse.next({

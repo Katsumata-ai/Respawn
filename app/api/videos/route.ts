@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DownloadService } from '@/lib/download/service';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { verifyWhopToken, checkUserHasPremiumAccess } from '@/lib/whop/server';
+import { verifyWhopToken, checkUserHasPremiumAccess, getUserUploadLimit } from '@/lib/whop/server';
+import { getUserUploadCount, incrementUserUploadCount } from '@/lib/whop/upload-tracker';
 import { v4 as uuidv4 } from 'uuid';
-
-const FREE_UPLOAD_LIMIT = 3;
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,72 +37,30 @@ export async function POST(request: NextRequest) {
     const whopUserId = payload.userId;
     const shareableId = uuidv4();
 
-    // Check if user has premium access
+    // Check if user has premium access using Whop API
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
+    const uploadLimit = await getUserUploadLimit(whopUserId);
 
-    // If user is FREE, check upload limit using user_limits table
+    // If user is FREE, check upload limit
     if (!hasPremium) {
-      const supabase = getSupabaseClient();
-      console.log(`[Upload] Checking limits for user: ${whopUserId}`);
-
-      // Get or create user limits
-      let { data: limits, error: limitsError } = await supabase
-        .from('user_limits')
-        .select('*')
-        .eq('user_id', whopUserId)
-        .single();
-
-      console.log(`[Upload] Limits query result:`, { limits, error: limitsError });
-
-      // If no limits exist, create default ones
-      if (limitsError && limitsError.code === 'PGRST116') {
-        console.log(`[Upload] No limits found, creating default limits`);
-        const { data: newLimits, error: createError } = await supabase
-          .from('user_limits')
-          .insert({
-            user_id: whopUserId,
-            cloud_uploads_count: 0,
-            local_downloads_count: 0,
-            cloud_uploads_limit: FREE_UPLOAD_LIMIT,
-            local_downloads_limit: 3,
-          })
-          .select()
-          .single();
-
-        if (createError) {
-          console.error('[Upload] Error creating user limits:', createError);
-          return NextResponse.json(
-            { error: 'Failed to initialize user limits', details: createError.message },
-            { status: 500 }
-          );
-        }
-        limits = newLimits;
-        console.log(`[Upload] Created new limits:`, limits);
-      } else if (limitsError) {
-        console.error('[Upload] Error checking upload limit:', limitsError);
-        return NextResponse.json(
-          { error: 'Failed to check upload limit', details: limitsError.message },
-          { status: 500 }
-        );
-      }
-
-      console.log(`[Upload] Current upload count: ${limits?.cloud_uploads_count}/${FREE_UPLOAD_LIMIT}`);
+      const currentUploadCount = getUserUploadCount(whopUserId);
+      console.log(`[Upload] User ${whopUserId} upload count: ${currentUploadCount}/${uploadLimit}`);
 
       // Check if user has reached upload limit
-      if (limits && limits.cloud_uploads_count >= FREE_UPLOAD_LIMIT) {
+      if (currentUploadCount >= uploadLimit) {
         console.log(`[Upload] User has reached upload limit`);
         return NextResponse.json(
           {
             error: 'Upload limit reached',
-            message: `Free users can upload up to ${FREE_UPLOAD_LIMIT} videos. Upgrade to premium for unlimited uploads.`,
-            limit: FREE_UPLOAD_LIMIT,
-            current: limits.cloud_uploads_count
+            message: `Free users can upload up to ${uploadLimit} videos. Upgrade to premium for unlimited uploads.`,
+            limit: uploadLimit,
+            current: currentUploadCount
           },
           { status: 403 }
         );
       }
 
-      console.log(`[Upload] User can upload (${limits?.cloud_uploads_count}/${FREE_UPLOAD_LIMIT})`);
+      console.log(`[Upload] User can upload (${currentUploadCount}/${uploadLimit})`);
     }
 
     // Validate Mux URL
@@ -134,27 +91,8 @@ export async function POST(request: NextRequest) {
 
     // Increment upload counter for free users (only after successful upload)
     if (!hasPremium) {
-      const supabase = getSupabaseClient();
-
-      // Fetch current count and increment
-      const { data: currentLimits } = await supabase
-        .from('user_limits')
-        .select('cloud_uploads_count')
-        .eq('user_id', whopUserId)
-        .single();
-
-      if (currentLimits) {
-        const newCount = currentLimits.cloud_uploads_count + 1;
-        await supabase
-          .from('user_limits')
-          .update({
-            cloud_uploads_count: newCount,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', whopUserId);
-
-        console.log(`[Upload] Incremented upload count for user ${whopUserId}: ${newCount}/${FREE_UPLOAD_LIMIT}`);
-      }
+      const newCount = incrementUserUploadCount(whopUserId);
+      console.log(`[Upload] Incremented upload count for user ${whopUserId}: ${newCount}/${uploadLimit}`);
     }
 
     return NextResponse.json({

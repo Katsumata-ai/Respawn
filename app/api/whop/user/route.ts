@@ -1,11 +1,11 @@
 /**
  * GET /api/whop/user
  * Returns the current authenticated user from Whop context
- * Based on Whop SDK documentation
+ * No database operations needed - Whop manages all user data
  */
 
 import { NextResponse } from 'next/server';
-import { verifyWhopToken, upsertUser } from '@/lib/whop/server';
+import { verifyWhopToken } from '@/lib/whop/server';
 
 export async function GET() {
   try {
@@ -20,22 +20,14 @@ export async function GET() {
       );
     }
 
-    // In a real app, fetch user details from Whop API
-    // For now, return basic user info from token
+    // Return basic user info from token
+    // Whop manages all user data, we just use the userId
     const user = {
       id: payload.userId,
       email: `user_${payload.userId}@whop.local`,
       username: `user_${payload.userId}`,
       profilePicUrl: null,
     };
-
-    // Upsert user in database
-    await upsertUser(
-      payload.userId,
-      user.email,
-      user.username,
-      user.profilePicUrl || undefined
-    );
 
     return NextResponse.json(user);
   } catch (error) {

@@ -79,6 +79,8 @@ export async function verifyWhopToken(token?: string): Promise<WhopUserPayload |
       Buffer.from(parts[1], 'base64').toString('utf-8')
     );
 
+    console.log('[verifyWhopToken] Raw payload from token:', JSON.stringify(payload, null, 2));
+
     // Normalize the payload - handle both production and dev token formats
     const normalizedPayload: WhopUserPayload = {
       ...payload,
@@ -89,6 +91,9 @@ export async function verifyWhopToken(token?: string): Promise<WhopUserPayload |
       iat: payload.iat,
       exp: payload.exp,
     };
+
+    console.log('[verifyWhopToken] Normalized payload:', JSON.stringify(normalizedPayload, null, 2));
+    console.log('[verifyWhopToken] Extracted userId:', normalizedPayload.userId);
 
     return normalizedPayload;
   } catch (error) {
@@ -177,56 +182,17 @@ export async function getCurrentWhopUser() {
 }
 
 /**
- * Check if user has paid for access
- * All users have free access by default
+ * Check if user has paid for access using Whop API
+ * Returns true if user has active membership for premium plan
  */
 export async function checkUserAccess(userId: string): Promise<WhopAccessCheckResult> {
   try {
-    // Import Supabase client
-    const { getSupabaseClient } = await import('@/lib/supabase/client');
-    const supabase = getSupabaseClient();
+    // Use Whop API to check if user has premium membership
+    const hasPremium = await checkUserHasPremiumAccess(userId);
 
-    // Check if user exists, if not create them with free access
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id')
-      .eq('whop_user_id', userId)
-      .single();
-
-    if (error && error.code === 'PGRST116') {
-      // User doesn't exist, create them as FREE user (not paid)
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          whop_user_id: userId,
-          has_paid: false, // New users are FREE by default
-          payment_date: null,
-        });
-
-      if (insertError) {
-        console.error('Failed to create user:', insertError);
-      }
-
-      return {
-        hasAccess: true,
-        accessLevel: 'customer',
-        userId,
-      };
-    }
-
-    if (error) {
-      console.error('Failed to check user access:', error);
-      return {
-        hasAccess: true, // Allow access even if there's an error
-        accessLevel: 'customer',
-        userId,
-      };
-    }
-
-    // User exists, grant access
     return {
-      hasAccess: true,
-      accessLevel: 'customer',
+      hasAccess: true, // All users have access to the app
+      accessLevel: hasPremium ? 'customer' : 'customer', // Both free and paid are customers
       userId,
     };
   } catch (error) {
@@ -240,71 +206,18 @@ export async function checkUserAccess(userId: string): Promise<WhopAccessCheckRe
 }
 
 /**
- * Mark user as paid in database
- * Called when payment webhook is received
+ * Get user upload limit based on membership status
+ * Free users: 3 uploads
+ * Premium users: unlimited
  */
-export async function markUserAsPaid(userId: string) {
+export async function getUserUploadLimit(userId: string): Promise<number> {
   try {
-    const { getSupabaseClient } = await import('@/lib/supabase/client');
-    const supabase = getSupabaseClient();
-
-    const { error } = await supabase
-      .from('users')
-      .update({
-        has_paid: true,
-        payment_date: new Date().toISOString(),
-      })
-      .eq('whop_user_id', userId);
-
-    if (error) {
-      console.error('Failed to mark user as paid:', error);
-      return false;
-    }
-
-    return true;
+    const hasPremium = await checkUserHasPremiumAccess(userId);
+    // Free users: 3 uploads, Premium users: unlimited (return large number)
+    return hasPremium ? 999999 : 3;
   } catch (error) {
-    console.error('Failed to mark user as paid:', error);
-    return false;
-  }
-}
-
-/**
- * Create or update user in database
- */
-export async function upsertUser(
-  whopUserId: string,
-  email: string,
-  username: string,
-  profilePicUrl?: string
-) {
-  try {
-    const { getSupabaseClient } = await import('@/lib/supabase/client');
-    const supabase = getSupabaseClient();
-
-    const { error } = await supabase
-      .from('users')
-      .upsert(
-        {
-          whop_user_id: whopUserId,
-          email,
-          username,
-          avatar: profilePicUrl,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'whop_user_id',
-        }
-      );
-
-    if (error) {
-      console.error('Failed to upsert user:', error);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Failed to upsert user:', error);
-    return false;
+    console.error('Failed to get user upload limit:', error);
+    return 3; // Default to free limit on error
   }
 }
 

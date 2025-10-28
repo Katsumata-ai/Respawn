@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyWhopToken, checkUserHasPremiumAccess } from '@/lib/whop/server';
-import { getSupabaseClient } from '@/lib/supabase/client';
-
-const FREE_UPLOAD_LIMIT = 3;
+import { verifyWhopToken, checkUserHasPremiumAccess, getUserUploadLimit } from '@/lib/whop/server';
+import { getUserUploadCount } from '@/lib/whop/upload-tracker';
 
 /**
  * Check user's premium status using Whop API
- * Also returns video count from videos table
+ * Returns upload count from in-memory tracker
  */
 export async function GET(request: NextRequest) {
   try {
@@ -24,49 +22,16 @@ export async function GET(request: NextRequest) {
 
     // Check if user has premium access using Whop API
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
+    const uploadLimit = await getUserUploadLimit(whopUserId);
+    const uploadCount = getUserUploadCount(whopUserId);
 
-    // Get upload count from user_limits table
-    const supabase = getSupabaseClient();
-    let uploadCount = 0;
-
-    if (!hasPremium) {
-      // Get or create user limits
-      let { data: limits, error: limitsError } = await supabase
-        .from('user_limits')
-        .select('cloud_uploads_count')
-        .eq('user_id', whopUserId)
-        .single();
-
-      // If no limits exist, create default ones
-      if (limitsError && limitsError.code === 'PGRST116') {
-        console.log(`[Status] No limits found for user ${whopUserId}, creating defaults`);
-        const { data: newLimits } = await supabase
-          .from('user_limits')
-          .insert({
-            user_id: whopUserId,
-            cloud_uploads_count: 0,
-            local_downloads_count: 0,
-            cloud_uploads_limit: FREE_UPLOAD_LIMIT,
-            local_downloads_limit: 3,
-          })
-          .select('cloud_uploads_count')
-          .single();
-
-        uploadCount = newLimits?.cloud_uploads_count || 0;
-      } else if (!limitsError && limits) {
-        uploadCount = limits.cloud_uploads_count || 0;
-      } else {
-        console.error('[Status] Error fetching limits:', limitsError);
-      }
-    }
-
-    console.log(`[Status] User ${whopUserId}: hasPremium=${hasPremium}, uploadCount=${uploadCount}/${FREE_UPLOAD_LIMIT}`);
+    console.log(`[Status] User ${whopUserId}: hasPremium=${hasPremium}, uploadCount=${uploadCount}/${uploadLimit}`);
 
     return NextResponse.json({
       userId: whopUserId,
       hasPremium,
       uploadCount,
-      uploadLimit: FREE_UPLOAD_LIMIT,
+      uploadLimit,
     });
   } catch (error) {
     console.error('Error fetching user status:', error);
