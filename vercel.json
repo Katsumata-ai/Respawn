@@ -1,0 +1,37 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "env": [
+    {
+      "key": "NEXT_PUBLIC_WHOP_APP_ID",
+      "description": "Whop App ID"
+    },
+    {
+      "key": "NEXT_PUBLIC_WHOP_AGENT_USER_ID",
+      "description": "Whop Agent User ID"
+    },
+    {
+      "key": "NEXT_PUBLIC_WHOP_COMPANY_ID",
+      "description": "Whop Company ID"
+    },
+    {
+      "key": "WHOP_APP_KEY",
+      "description": "Whop App Key"
+    },
+    {
+      "key": "NEXT_PUBLIC_SUPABASE_URL",
+      "description": "Supabase URL"
+    },
+    {
+      "key": "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "description": "Supabase Anon Key"
+    },
+    {
+      "key": "SUPABASE_SERVICE_ROLE_KEY",
+      "description": "Supabase Service Role Key"
+    }
+  ]
+}
+

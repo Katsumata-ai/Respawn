@@ -1,0 +1,38 @@
+{
+  "name": "course-downloader-whop",
+  "version": "1.0.0",
+  "description": "Download and manage course videos from your Whop community",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.1.0",
+    "@fortawesome/react-fontawesome": "^3.1.0",
+    "@supabase/supabase-js": "^2.76.1",
+    "@whop/api": "^0.0.51",
+    "@whop/iframe": "^0.0.3",
+    "@whop/react": "^0.3.0",
+    "frosted-ui": "^0.0.1-canary.85",
+    "hls.js": "^1.6.13",
+    "lucide-react": "^0.548.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.0.0"
+  }
+}
