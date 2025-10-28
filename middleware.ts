@@ -5,41 +5,65 @@ import { NextRequest, NextResponse } from 'next/server';
  * In dev mode, Whop sends the token as a query parameter in the referer URL
  */
 export function middleware(request: NextRequest) {
-  // Get the referer header (the URL of the page that made the request)
+  const requestHeaders = new Headers(request.headers);
+  let tokenAdded = false;
+
+  // 1. Try to get token from referer (for API calls from pages with token in URL)
   const referer = request.headers.get('referer');
+  console.log('[Middleware] Path:', request.nextUrl.pathname);
   console.log('[Middleware] Referer:', referer);
 
   if (referer) {
     try {
       const refererUrl = new URL(referer);
       const devToken = refererUrl.searchParams.get('whop-dev-user-token');
-      console.log('[Middleware] Dev token found:', !!devToken);
+      console.log('[Middleware] Dev token from referer:', !!devToken);
 
       if (devToken) {
-        // Add to headers for API routes
-        if (request.nextUrl.pathname.startsWith('/api/')) {
-          const requestHeaders = new Headers(request.headers);
-          requestHeaders.set('x-whop-user-token', devToken);
-          console.log('[Middleware] Token added to headers for API route');
-
-          return NextResponse.next({
-            request: {
-              headers: requestHeaders,
-            },
-          });
-        }
+        requestHeaders.set('x-whop-user-token', devToken);
+        tokenAdded = true;
+        console.log('[Middleware] ✅ Token added from referer');
       }
     } catch (e) {
-      // Invalid referer URL, continue without modification
       console.log('[Middleware] Error parsing referer:', e);
     }
   }
 
-  return NextResponse.next();
+  // 2. Try to get token from query params (for direct API calls)
+  if (!tokenAdded) {
+    const queryToken = request.nextUrl.searchParams.get('whop-dev-user-token');
+    if (queryToken) {
+      requestHeaders.set('x-whop-user-token', queryToken);
+      tokenAdded = true;
+      console.log('[Middleware] ✅ Token added from query params');
+    }
+  }
+
+  // 3. Try to get token from x-whop-user-token header (already present)
+  if (!tokenAdded) {
+    const headerToken = request.headers.get('x-whop-user-token');
+    if (headerToken) {
+      tokenAdded = true;
+      console.log('[Middleware] ✅ Token already in headers');
+    }
+  }
+
+  if (!tokenAdded) {
+    console.log('[Middleware] ⚠️ No token found');
+  }
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
 // Configure which routes the middleware should run on
 export const config = {
-  matcher: ['/api/:path*'],
+  matcher: [
+    '/api/:path*',
+    '/experiences/:path*',
+  ],
 };
 

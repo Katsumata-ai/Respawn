@@ -117,6 +117,11 @@ export default function PremiumUpgradeButton({
       >
         {loading ? 'Processing...' : 'Upgrade Now'}
       </button>
+      {!whopToken && (
+        <p style={{ color: '#FF6B6B', marginTop: '8px', fontSize: '12px' }}>
+          No authentication token available
+        </p>
+      )}
       {error && (
         <p style={{ color: '#FF6B6B', marginTop: '8px', fontSize: '14px' }}>
           {error}

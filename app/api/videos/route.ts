@@ -8,8 +8,12 @@ const FREE_UPLOAD_LIMIT = 3;
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('[POST /api/videos] Request received');
+
     const body = await request.json();
     const { muxUrl, title } = body;
+
+    console.log('[POST /api/videos] Body:', { muxUrl: !!muxUrl, title: !!title });
 
     if (!muxUrl || !title) {
       return NextResponse.json(
@@ -19,11 +23,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Whop user from token
+    console.log('[POST /api/videos] Verifying token...');
     const payload = await verifyWhopToken();
+    console.log('[POST /api/videos] Token payload:', payload);
 
     if (!payload || !payload.userId) {
+      console.error('[POST /api/videos] No valid token or userId');
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized - Please refresh the page' },
         { status: 401 }
       );
     }
@@ -155,9 +162,13 @@ export async function POST(request: NextRequest) {
       title: title,
     }, { status: 201 });
   } catch (error) {
-    console.error('Error processing video:', error);
+    console.error('[POST /api/videos] Error processing video:', error);
+    console.error('[POST /api/videos] Error stack:', error instanceof Error ? error.stack : 'No stack');
     return NextResponse.json(
-      { error: 'Failed to process video' },
+      {
+        error: 'Failed to process video',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
