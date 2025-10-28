@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState } from 'react';
 import { useIframeSdk } from '@whop/react';
 
 interface PremiumUpgradeButtonProps {
@@ -9,7 +8,7 @@ interface PremiumUpgradeButtonProps {
   onSuccess?: () => void;
   className?: string;
   style?: React.CSSProperties;
-  whopToken?: string;
+  whopToken?: string; // Keep for backward compatibility but not used
 }
 
 export default function PremiumUpgradeButton({
@@ -17,42 +16,21 @@ export default function PremiumUpgradeButton({
   onSuccess,
   className = '',
   style,
-  whopToken: propWhopToken,
 }: PremiumUpgradeButtonProps) {
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [whopToken, setWhopToken] = useState<string | undefined>(propWhopToken);
   const iframeSdk = useIframeSdk();
 
-  useEffect(() => {
-    // Get token from URL if not provided via props
-    if (!whopToken) {
-      const token = searchParams.get('whop-dev-user-token');
-      if (token) {
-        setWhopToken(token);
-        console.log('[PremiumUpgradeButton] Token from URL:', !!token);
-      }
-    }
-  }, [searchParams, whopToken]);
-
-  // Get the premium plan ID from the API
-  const getPlanId = async () => {
+  // Get the premium plan ID directly from env
+  const getPlanId = () => {
     console.log('[PremiumUpgradeButton] Getting premium plan ID');
+    const planId = process.env.NEXT_PUBLIC_WHOP_PREMIUM_PLAN_ID;
 
-    if (!whopToken) {
-      throw new Error('No authentication token available');
+    if (!planId) {
+      throw new Error('Premium plan ID not configured');
     }
 
-    const response = await fetch(`/api/whop/plan-id?token=${encodeURIComponent(whopToken)}`);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to get plan ID');
-    }
-
-    const result = await response.json();
-    return result.planId;
+    return planId;
   };
 
   const handlePurchase = async () => {
@@ -60,10 +38,10 @@ export default function PremiumUpgradeButton({
       setLoading(true);
       setError(null);
 
-      console.log('[PremiumUpgradeButton] Token:', !!whopToken);
+      console.log('[PremiumUpgradeButton] Starting purchase flow');
 
       // Get the premium plan ID
-      const planId = await getPlanId();
+      const planId = getPlanId();
       console.log('[PremiumUpgradeButton] Plan ID:', planId);
 
       // Open the payment modal using iFrame SDK
@@ -117,11 +95,6 @@ export default function PremiumUpgradeButton({
       >
         {loading ? 'Processing...' : 'Upgrade Now'}
       </button>
-      {!whopToken && (
-        <p style={{ color: '#FF6B6B', marginTop: '8px', fontSize: '12px' }}>
-          No authentication token available
-        </p>
-      )}
       {error && (
         <p style={{ color: '#FF6B6B', marginTop: '8px', fontSize: '14px' }}>
           {error}
