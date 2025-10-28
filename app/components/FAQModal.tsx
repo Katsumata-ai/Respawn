@@ -50,7 +50,7 @@ export default function FAQModal({ isOpen, onClose }: FAQModalProps) {
     {
       question: 'What if I have a problem or want a refund?',
       answer:
-        'Send a DM to the founder. We offer a 30-day money-back guarantee with no questions asked. We are here to help!',
+        'Send a support ticket on our Whop. We offer a 30-day money-back guarantee with no questions asked. We are here to help!',
     },
 
   ];
@@ -144,12 +144,27 @@ export default function FAQModal({ isOpen, onClose }: FAQModalProps) {
             border: '1px solid #2B2B2B',
           }}
         >
-          <p style={{ color: '#FFFFFF', fontWeight: '500', marginBottom: '4px' }}>
+          <p style={{ color: '#FFFFFF', fontWeight: '500', marginBottom: '8px' }}>
             Still have questions?
           </p>
-          <p style={{ color: '#AAAAAA', fontSize: '14px' }}>
-            Send a DM to the founder for support
-          </p>
+          <a
+            href="https://whop.com/free-whop-videos/?a=the-21st-century-boy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-6 py-2.5 rounded-lg font-semibold transition text-sm"
+            style={{
+              backgroundColor: '#FF8102',
+              color: '#161616',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#FF6B00';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#FF8102';
+            }}
+          >
+            Send a Support Ticket
+          </a>
         </div>
 
         {/* Close Button */}
