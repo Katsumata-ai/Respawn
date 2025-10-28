@@ -53,18 +53,24 @@ export async function verifyWhopToken(token?: string): Promise<WhopUserPayload |
     if (!whopToken) {
       const headersList = await headers();
       whopToken = headersList.get('x-whop-user-token') || undefined;
+      console.log('[verifyWhopToken] Checking x-whop-user-token header:', !!whopToken);
     }
 
     // If still no token, try to get from x-whop-dev-token header (set by middleware)
     if (!whopToken) {
       const headersList = await headers();
       whopToken = headersList.get('x-whop-dev-token') || undefined;
+      console.log('[verifyWhopToken] Checking x-whop-dev-token header:', !!whopToken);
     }
 
     if (!whopToken) {
-      console.warn('No Whop token found in headers or query parameters');
+      console.warn('[verifyWhopToken] ❌ No Whop token found in headers');
+      const headersList = await headers();
+      console.warn('[verifyWhopToken] Available headers:', Array.from(headersList.entries()).map(([k]) => k).join(', '));
       return null;
     }
+
+    console.log('[verifyWhopToken] ✅ Token found, length:', whopToken.length);
 
     // In production, verify the JWT signature
     // For now, we'll decode it (in real app, use jwt.verify)

@@ -28,9 +28,10 @@ export async function POST(request: NextRequest) {
     console.log('[POST /api/videos] Token payload:', payload);
 
     if (!payload || !payload.userId) {
-      console.error('[POST /api/videos] No valid token or userId');
+      console.error('[POST /api/videos] ❌ No valid token or userId');
+      console.error('[POST /api/videos] Payload:', payload);
       return NextResponse.json(
-        { error: 'Unauthorized - Please refresh the page' },
+        { error: 'Unauthorized - Please refresh the page', debug: 'No token found' },
         { status: 401 }
       );
     }
