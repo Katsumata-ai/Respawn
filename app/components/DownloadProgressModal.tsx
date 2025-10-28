@@ -110,29 +110,58 @@ export default function DownloadProgressModal({
 
         const playlistText = await playlistResponse.text();
         console.log(`[Download] Playlist fetched, size: ${playlistText.length} bytes`);
-        console.log(`[Download] Playlist content (first 500 chars):`, playlistText.substring(0, 500));
 
-        // Parse the playlist to get segment URLs
+        // Parse the playlist to get rendition URLs (variant playlists)
         const lines = playlistText.split('\n');
-        const segments: string[] = [];
-        const baseUrl = data.url.substring(0, data.url.lastIndexOf('/') + 1);
-
-        console.log(`[Download] Base URL: ${baseUrl}`);
-        console.log(`[Download] Total lines in playlist: ${lines.length}`);
+        const renditions: string[] = [];
 
         for (const line of lines) {
-          if (line && !line.startsWith('#')) {
-            console.log(`[Download] Processing line: "${line}"`);
-            if (line.endsWith('.ts')) {
-              segments.push(baseUrl + line);
+          if (line && !line.startsWith('#') && line.includes('rendition.m3u8')) {
+            renditions.push(line);
+          }
+        }
+
+        console.log(`[Download] Found ${renditions.length} renditions`);
+
+        if (renditions.length === 0) {
+          throw new Error('No renditions found in HLS playlist');
+        }
+
+        // Download the first (best quality) rendition playlist
+        const renditionUrl = renditions[0];
+        console.log(`[Download] Downloading rendition: ${renditionUrl.substring(0, 100)}...`);
+
+        const renditionResponse = await fetch(renditionUrl, {
+          signal: abortController.signal,
+        });
+
+        if (!renditionResponse.ok) {
+          throw new Error(`Failed to fetch rendition: ${renditionResponse.status}`);
+        }
+
+        const renditionText = await renditionResponse.text();
+        console.log(`[Download] Rendition fetched, size: ${renditionText.length} bytes`);
+
+        // Parse the rendition to get segment URLs
+        const renditionLines = renditionText.split('\n');
+        const segments: string[] = [];
+        const renditionBaseUrl = renditionUrl.substring(0, renditionUrl.lastIndexOf('/') + 1);
+
+        for (const line of renditionLines) {
+          if (line && !line.startsWith('#') && line.endsWith('.ts')) {
+            // Handle both absolute and relative URLs
+            if (line.startsWith('http')) {
+              segments.push(line);
+            } else {
+              segments.push(renditionBaseUrl + line);
             }
           }
         }
 
-        console.log(`[Download] Found ${segments.length} segments`);
+        console.log(`[Download] Found ${segments.length} segments in rendition`);
 
         if (segments.length === 0) {
-          throw new Error('No video segments found in HLS playlist');
+          throw new Error('No video segments found in rendition playlist');
         }
 
         // Download all segments
