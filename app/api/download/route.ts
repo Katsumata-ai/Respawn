@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DownloadService } from '@/lib/download/service';
 
-export const maxDuration = 3600; // 1 hour timeout for Vercel
+export const maxDuration = 300; // 5 minutes timeout for Vercel Hobby plan
 
 export async function POST(request: NextRequest) {
   try {
