@@ -142,37 +142,70 @@ export default function DownloadProgressModal({
         const renditionText = await renditionResponse.text();
         console.log(`[Download] Rendition fetched, size: ${renditionText.length} bytes`);
 
-        // Parse the rendition to get segment URLs
-        // Mux uses .m4s (MPEG-4 Segment) format, not .ts
+        // Parse the rendition to get initialization segment and media segments
+        // Mux uses .m4s (MPEG-4 Segment) format with an initialization segment
         const renditionLines = renditionText.split('\n');
+        let initSegmentUrl: string | null = null;
         const segments: string[] = [];
 
-        for (const line of renditionLines) {
-          const trimmedLine = line.trim();
+        for (let i = 0; i < renditionLines.length; i++) {
+          const line = renditionLines[i].trim();
 
-          // Skip comments and empty lines
-          if (!trimmedLine || trimmedLine.startsWith('#')) {
+          // Look for initialization segment (EXT-X-MAP)
+          if (line.startsWith('#EXT-X-MAP:')) {
+            const uriMatch = line.match(/URI="([^"]+)"/);
+            if (uriMatch) {
+              initSegmentUrl = uriMatch[1];
+              console.log(`[Download] Found init segment: ${initSegmentUrl.substring(0, 100)}...`);
+            }
+            continue;
+          }
+
+          // Skip other comments and empty lines
+          if (!line || line.startsWith('#')) {
             continue;
           }
 
           // Look for .m4s segment files (Mux uses MPEG-4 segments)
-          if (trimmedLine.includes('.m4s')) {
-            segments.push(trimmedLine);
+          if (line.includes('.m4s')) {
+            segments.push(line);
           }
         }
 
-        console.log(`[Download] Found ${segments.length} segments in rendition`);
+        console.log(`[Download] Found init segment: ${initSegmentUrl ? 'YES' : 'NO'}`);
+        console.log(`[Download] Found ${segments.length} media segments in rendition`);
+
+        if (!initSegmentUrl) {
+          throw new Error('No initialization segment found in rendition playlist');
+        }
 
         if (segments.length === 0) {
           throw new Error('No video segments found in rendition playlist');
         }
 
-        // Download all segments
+        // Download initialization segment first
         if (!isMounted) return;
-        setStatus('Downloading video segments...');
+        setStatus('Downloading initialization segment...');
         setProgress(30);
 
-        const chunks: ArrayBuffer[] = [];
+        console.log(`[Download] Downloading init segment: ${initSegmentUrl.substring(0, 100)}...`);
+        const initResponse = await fetch(initSegmentUrl, {
+          signal: abortController.signal,
+        });
+
+        if (!initResponse.ok) {
+          throw new Error(`Failed to download initialization segment: ${initResponse.status}`);
+        }
+
+        const initBuffer = await initResponse.arrayBuffer();
+        console.log(`[Download] Init segment downloaded, size: ${initBuffer.byteLength} bytes`);
+
+        // Download all media segments
+        if (!isMounted) return;
+        setStatus('Downloading video segments...');
+        setProgress(35);
+
+        const chunks: ArrayBuffer[] = [initBuffer]; // Start with init segment
 
         for (let i = 0; i < segments.length; i++) {
           if (!isMounted) return;
@@ -192,12 +225,12 @@ export default function DownloadProgressModal({
           const buffer = await segmentResponse.arrayBuffer();
           chunks.push(buffer);
 
-          // Update progress
-          const segmentProgress = 30 + (i / segments.length) * 60;
+          // Update progress (35% to 95%)
+          const segmentProgress = 35 + (i / segments.length) * 60;
           setProgress(segmentProgress);
         }
 
-        if (chunks.length === 0) {
+        if (chunks.length <= 1) {
           throw new Error('Failed to download any video segments');
         }
 
