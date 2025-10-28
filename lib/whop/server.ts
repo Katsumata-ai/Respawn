@@ -135,8 +135,8 @@ export async function checkUserHasPremiumAccess(userId: string): Promise<boolean
     console.log('[checkUserHasPremiumAccess] Premium Plan ID:', PREMIUM_PLAN_ID);
 
     // Call Whop API to check user's memberships
-    // Using the /me/memberships endpoint which returns all memberships for the authenticated user
-    const response = await fetch('https://api.whop.com/api/v5/me/memberships', {
+    // Using the /memberships endpoint with user_id filter
+    const response = await fetch(`https://api.whop.com/api/v5/memberships?user_id=${userId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${WHOP_API_KEY}`,
@@ -155,13 +155,18 @@ export async function checkUserHasPremiumAccess(userId: string): Promise<boolean
     console.log('[checkUserHasPremiumAccess] Whop API response:', JSON.stringify(data, null, 2));
 
     // Check if user has an active membership for the premium plan
-    const hasPremium = data.data?.some((membership: any) =>
-      membership.user_id === userId &&
-      membership.plan_id === PREMIUM_PLAN_ID &&
-      membership.status === 'active'
-    ) || false;
+    // The response should be an array of memberships
+    const memberships = Array.isArray(data) ? data : (data.data || []);
+    console.log('[checkUserHasPremiumAccess] Memberships found:', memberships.length);
 
-    console.log('[checkUserHasPremiumAccess] User has premium:', hasPremium);
+    const hasPremium = memberships.some((membership: any) => {
+      const isCorrectPlan = membership.plan_id === PREMIUM_PLAN_ID;
+      const isActive = membership.status === 'active';
+      console.log(`[checkUserHasPremiumAccess] Membership: plan_id=${membership.plan_id}, status=${membership.status}, matches=${isCorrectPlan && isActive}`);
+      return isCorrectPlan && isActive;
+    });
+
+    console.log('[checkUserHasPremiumAccess] ✅ User has premium:', hasPremium);
     return hasPremium;
   } catch (error) {
     console.error('Error checking premium access:', error);

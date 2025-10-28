@@ -39,43 +39,52 @@ export async function POST(request: NextRequest) {
     const whopUserId = payload.userId;
     const shareableId = uuidv4();
 
+    console.log(`[Upload] whopUserId: "${whopUserId}" (type: ${typeof whopUserId})`);
+
     // Check if user has premium access using Whop API
+    console.log('[Upload] Checking premium access...');
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
+    console.log(`[Upload] hasPremium: ${hasPremium}`);
 
     // If user is FREE, check upload limit by counting videos in Supabase
     if (!hasPremium) {
       const supabase = getSupabaseClient();
+      console.log(`[Upload] Counting videos for user: "${whopUserId}"`);
+
       const { count, error: countError } = await supabase
         .from('videos')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', whopUserId);
 
       if (countError) {
-        console.error('[Upload] Error counting videos:', countError);
+        console.error('[Upload] ❌ Error counting videos:', countError);
         return NextResponse.json(
-          { error: 'Failed to check upload limit' },
+          { error: 'Failed to check upload limit', details: countError },
           { status: 500 }
         );
       }
 
       const currentUploadCount = count || 0;
-      console.log(`[Upload] User ${whopUserId} upload count: ${currentUploadCount}/${FREE_UPLOAD_LIMIT}`);
+      console.log(`[Upload] ✅ User "${whopUserId}" has ${currentUploadCount}/${FREE_UPLOAD_LIMIT} videos`);
 
       // Check if user has reached upload limit
       if (currentUploadCount >= FREE_UPLOAD_LIMIT) {
-        console.log(`[Upload] User has reached upload limit`);
+        console.log(`[Upload] ❌ User has reached upload limit`);
         return NextResponse.json(
           {
             error: 'Upload limit reached',
             message: `Free users can upload up to ${FREE_UPLOAD_LIMIT} videos. Upgrade to premium for unlimited uploads.`,
             limit: FREE_UPLOAD_LIMIT,
-            current: currentUploadCount
+            current: currentUploadCount,
+            userId: whopUserId
           },
           { status: 403 }
         );
       }
 
-      console.log(`[Upload] User can upload (${currentUploadCount}/${FREE_UPLOAD_LIMIT})`);
+      console.log(`[Upload] ✅ User can upload (${currentUploadCount}/${FREE_UPLOAD_LIMIT})`);
+    } else {
+      console.log(`[Upload] ✅ Premium user, skipping upload limit check`);
     }
 
     // Validate Mux URL
