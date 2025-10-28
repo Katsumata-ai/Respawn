@@ -93,120 +93,116 @@ export default function DownloadProgressModal({
           throw new Error(data.error || 'Failed to get download URL');
         }
 
-        // Download HLS stream and convert to MP4
+        // Download HLS stream directly from Mux
         if (!isMounted) return;
-        setStatus('Downloading HLS stream...');
-        setProgress(10);
+        setStatus('Downloading video...');
+        setProgress(20);
         console.log(`[Download] Downloading HLS stream from Mux`);
 
-        // Load hls.js library
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
-        script.onload = async () => {
-          try {
-            // @ts-ignore - hls.js is loaded dynamically
-            const Hls = window.Hls;
+        // Fetch the HLS playlist
+        const playlistResponse = await fetch(data.url, {
+          signal: abortController.signal,
+        });
 
-            if (!Hls.isSupported()) {
-              throw new Error('HLS is not supported in this browser');
-            }
+        if (!playlistResponse.ok) {
+          throw new Error(`Failed to fetch HLS playlist: ${playlistResponse.status}`);
+        }
 
-            // Create video element for HLS playback
-            const video = document.createElement('video');
-            const hls = new Hls();
+        const playlistText = await playlistResponse.text();
+        console.log(`[Download] Playlist fetched, size: ${playlistText.length} bytes`);
 
-            hls.loadSource(data.url);
-            hls.attachMedia(video);
+        // Parse the playlist to get segment URLs
+        const lines = playlistText.split('\n');
+        const segments: string[] = [];
+        const baseUrl = data.url.substring(0, data.url.lastIndexOf('/') + 1);
 
-            // Wait for manifest to load
-            await new Promise<void>((resolve, reject) => {
-              hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                if (isMounted) setProgress(30);
-                resolve();
-              });
-              hls.on(Hls.Events.ERROR, (event: any, data: any) => {
-                reject(new Error(`HLS error: ${data.reason}`));
-              });
-              setTimeout(() => reject(new Error('HLS load timeout')), 30000);
-            });
-
-            // Download all segments
-            if (!isMounted) return;
-            setStatus('Downloading video segments...');
-            setProgress(40);
-
-            const chunks: ArrayBuffer[] = [];
-            let totalSize = 0;
-
-            // Get all segment URLs
-            const segments = hls.levels[0].details?.fragments || [];
-            console.log(`[Download] Found ${segments.length} segments`);
-
-            for (let i = 0; i < segments.length; i++) {
-              if (!isMounted) return;
-
-              const segment = segments[i];
-              const segmentUrl = hls.levels[0].details?.baseUrl + segment.relurl;
-
-              const segmentResponse = await fetch(segmentUrl, {
-                signal: abortController.signal,
-              });
-
-              if (!segmentResponse.ok) {
-                throw new Error(`Failed to download segment ${i}`);
-              }
-
-              const buffer = await segmentResponse.arrayBuffer();
-              chunks.push(buffer);
-              totalSize += buffer.byteLength;
-
-              // Update progress
-              const segmentProgress = 40 + (i / segments.length) * 50;
-              setProgress(segmentProgress);
-              console.log(`[Download] Downloaded segment ${i + 1}/${segments.length}`);
-            }
-
-            // Combine chunks into single blob
-            if (!isMounted) return;
-            setStatus('Converting to MP4...');
-            setProgress(90);
-
-            const blob = new Blob(chunks as BlobPart[], { type: 'video/mp4' });
-            console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
-
-            // Trigger download
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${videoTitle}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            // Cleanup
-            hls.destroy();
-
-            if (isMounted) {
-              setStatus('Download complete! ✓');
-              setProgress(100);
-              console.log(`[Download] Download complete!`);
-
-              setTimeout(() => {
-                if (isMounted) {
-                  setIsDownloading(false);
-                  onClose();
-                }
-              }, 1500);
-            }
-          } catch (error) {
-            throw error;
+        for (const line of lines) {
+          if (line && !line.startsWith('#') && line.endsWith('.ts')) {
+            segments.push(baseUrl + line);
           }
-        };
-        script.onerror = () => {
-          throw new Error('Failed to load hls.js library');
-        };
-        document.head.appendChild(script);
+        }
+
+        console.log(`[Download] Found ${segments.length} segments`);
+
+        if (segments.length === 0) {
+          throw new Error('No video segments found in HLS playlist');
+        }
+
+        // Download all segments
+        if (!isMounted) return;
+        setStatus('Downloading video segments...');
+        setProgress(30);
+
+        const chunks: ArrayBuffer[] = [];
+
+        for (let i = 0; i < segments.length; i++) {
+          if (!isMounted) return;
+
+          const segmentUrl = segments[i];
+          console.log(`[Download] Downloading segment ${i + 1}/${segments.length}: ${segmentUrl}`);
+
+          const segmentResponse = await fetch(segmentUrl, {
+            signal: abortController.signal,
+          });
+
+          if (!segmentResponse.ok) {
+            console.warn(`[Download] Failed to download segment ${i}, status: ${segmentResponse.status}`);
+            continue; // Skip failed segments
+          }
+
+          const buffer = await segmentResponse.arrayBuffer();
+          chunks.push(buffer);
+
+          // Update progress
+          const segmentProgress = 30 + (i / segments.length) * 60;
+          setProgress(segmentProgress);
+        }
+
+        if (chunks.length === 0) {
+          throw new Error('Failed to download any video segments');
+        }
+
+        // Combine chunks into single blob
+        if (!isMounted) return;
+        setStatus('Finalizing download...');
+        setProgress(95);
+
+        const blob = new Blob(chunks as BlobPart[], { type: 'video/mp4' });
+        console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
+
+        // Trigger download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${videoTitle}.mp4`;
+
+        // Ensure element is in DOM before clicking
+        if (!document.body.contains(a)) {
+          document.body.appendChild(a);
+        }
+
+        a.click();
+
+        // Cleanup after a delay to ensure download starts
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          if (document.body.contains(a)) {
+            document.body.removeChild(a);
+          }
+        }, 100);
+
+        if (isMounted) {
+          setStatus('Download complete! ✓');
+          setProgress(100);
+          console.log(`[Download] Download complete!`);
+
+          setTimeout(() => {
+            if (isMounted) {
+              setIsDownloading(false);
+              onClose();
+            }
+          }, 1500);
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           console.log('[Download] Download cancelled by user');
