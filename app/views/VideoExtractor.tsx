@@ -360,7 +360,7 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
           value={muxUrl}
           onChange={(e) => setMuxUrl(e.target.value)}
           placeholder="Mux link"
-          className="w-full px-4 py-2.5 rounded h-20 resize-none text-sm focus:outline-none transition"
+          className="w-full px-4 py-2.5 rounded h-32 resize-none text-sm focus:outline-none transition"
           style={{ backgroundColor: '#2B2B2B', borderColor: '#494949', border: '1px solid', color: '#FFFFFF' }}
           onFocus={(e) => e.target.style.borderColor = '#FF8102'}
           onBlur={(e) => e.target.style.borderColor = '#494949'}

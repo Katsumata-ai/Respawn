@@ -141,9 +141,14 @@ export default function ExperiencePage() {
         <div className="mb-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold" style={{ color: '#FFFFFF' }}>
-                Course Downloader
-              </h1>
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-2xl font-bold" style={{ color: '#FFFFFF' }}>
+                  Whop Video Downloader
+                </h1>
+                <span className="text-xs font-medium" style={{ color: '#676767' }}>
+                  v1
+                </span>
+              </div>
               {!loadingStatus && (
                 <>
                   {hasPremium ? (
