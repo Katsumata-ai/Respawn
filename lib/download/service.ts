@@ -3,12 +3,23 @@ import { VideoStorage } from './storage';
 import { DownloadRequest, DownloadResponse } from './types';
 
 export class DownloadService {
-  private downloader: VideoDownloader;
+  private downloader: VideoDownloader | null = null;
   private storage: VideoStorage;
 
   constructor() {
-    this.downloader = new VideoDownloader();
+    // Don't create VideoDownloader here - it tries to create directories
+    // Only create it when actually needed (in processDownload)
     this.storage = new VideoStorage();
+  }
+
+  /**
+   * Lazy initialize VideoDownloader only when needed
+   */
+  private getDownloader(): VideoDownloader {
+    if (!this.downloader) {
+      this.downloader = new VideoDownloader();
+    }
+    return this.downloader;
   }
 
   /**
@@ -161,7 +172,8 @@ export class DownloadService {
 
       // Step 1: Download video
       console.log('Step 1: Downloading video...');
-      const downloadResult = await this.downloader.downloadVideo(
+      const downloader = this.getDownloader();
+      const downloadResult = await downloader.downloadVideo(
         request.muxUrl,
         request.videoTitle
       );
@@ -171,8 +183,8 @@ export class DownloadService {
 
       // Step 2: Get video info
       console.log('Step 2: Getting video information...');
-      const videoInfo = await this.downloader.getVideoInfo(filePath);
-      const fileSize = this.downloader.getFileSize(filePath);
+      const videoInfo = await downloader.getVideoInfo(filePath);
+      const fileSize = downloader.getFileSize(filePath);
       console.log('Step 2 completed');
 
       // Extract resolution from video info
@@ -214,7 +226,7 @@ export class DownloadService {
 
       // Step 5: Cleanup temp files
       console.log('Step 5: Cleaning up temporary files...');
-      this.downloader.cleanupTempFile(filePath);
+      downloader.cleanupTempFile(filePath);
       console.log('Step 5 completed');
 
       // Generate URLs - use Vercel production URL in production
