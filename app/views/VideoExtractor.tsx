@@ -163,12 +163,14 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle upload limit error (403)
-        if (response.status === 403 && data.message) {
-          setError(data.message);
+        // Handle upload limit error (403) - check for specific error message
+        if (response.status === 403 && data.error === 'Upload limit reached') {
+          setError(data.message || 'Upload limit reached');
           setIsLimitError(true);
         } else {
-          setError(data.error || 'Failed to process video');
+          // Other errors (validation, etc.)
+          setError(data.message || data.error || 'Failed to process video');
+          setIsLimitError(false);
         }
         return;
       }
@@ -265,11 +267,13 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
           <div className="flex items-start gap-2 mb-2">
             <AlertCircle size={18} className="flex-shrink-0 mt-0.5" style={{ color: '#FF8102' }} />
             <div className="flex-1">
-              <p className="font-semibold" style={{ color: '#FF8102' }}>Upload Limit Reached</p>
+              <p className="font-semibold" style={{ color: '#FF8102' }}>
+                {isLimitError ? 'Upload Limit Reached' : 'Error'}
+              </p>
               <p className="mt-1" style={{ color: '#FFFFFF' }}>
-                {error.split('Upgrade to premium')[0]}
-                {isLimitError && (
+                {isLimitError ? (
                   <>
+                    {error.split('Upgrade to premium')[0]}
                     <button
                       onClick={() => {
                         // Trigger paywall modal in parent component
@@ -282,6 +286,8 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
                     </button>
                     {' for unlimited uploads.'}
                   </>
+                ) : (
+                  error
                 )}
               </p>
             </div>
