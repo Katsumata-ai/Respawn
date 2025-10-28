@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useIframeSdk } from '@whop/react';
-import { createSubscription } from '@/app/actions/create-subscription';
 
 interface PremiumUpgradeButtonProps {
   experienceId?: string;
@@ -37,10 +36,22 @@ export default function PremiumUpgradeButton({
     }
   }, [searchParams, whopToken]);
 
-  // Get the premium plan ID from the server
+  // Get the premium plan ID from the API
   const getPlanId = async () => {
     console.log('[PremiumUpgradeButton] Getting premium plan ID');
-    const result = await createSubscription(experienceId, whopToken);
+
+    if (!whopToken) {
+      throw new Error('No authentication token available');
+    }
+
+    const response = await fetch(`/api/whop/plan-id?token=${encodeURIComponent(whopToken)}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get plan ID');
+    }
+
+    const result = await response.json();
     return result.planId;
   };
 

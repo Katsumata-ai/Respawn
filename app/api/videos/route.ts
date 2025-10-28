@@ -165,13 +165,24 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Get Whop user from token
+    const payload = await verifyWhopToken();
+
+    if (!payload || !payload.userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const whopUserId = payload.userId;
     const supabase = getSupabaseClient();
 
-    // Get all videos (for now, return all videos)
-    // TODO: Filter by user_id from Whop token
+    // Get videos for THIS user only
     const { data, error } = await supabase
       .from('videos')
-      .select('id, title, duration, created_at, shareable_id, thumbnail, mux_url, s3_url')
+      .select('id, title, duration, created_at, shareable_id, thumbnail, mux_url, s3_url, user_id')
+      .eq('user_id', whopUserId)
       .order('created_at', { ascending: false });
 
     if (error) {
