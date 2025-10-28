@@ -30,14 +30,16 @@ export async function POST(
       );
     }
 
-    // Return the Mux URL for direct download
-    // The browser will download directly from Mux, not from our server
+    // Convert HLS URL to MP4 URL for download
+    // Mux supports both .m3u8 (HLS streaming) and .mp4 (direct download)
+    const mp4Url = video.mux_url.replace('.m3u8', '.mp4');
+
     return NextResponse.json({
       success: true,
       type: 'stream',
-      url: video.mux_url,
+      url: mp4Url,
       title: video.title,
-      message: 'Download URL ready - browser will download directly from Mux',
+      message: 'Download URL ready - browser will download MP4 directly from Mux',
     });
   } catch (error) {
     console.error('API error:', error);
