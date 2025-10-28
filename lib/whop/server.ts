@@ -66,11 +66,15 @@ export async function verifyWhopToken(token?: string): Promise<WhopUserPayload |
     if (!whopToken) {
       console.warn('[verifyWhopToken] ❌ No Whop token found in headers');
       const headersList = await headers();
-      console.warn('[verifyWhopToken] Available headers:', Array.from(headersList.entries()).map(([k]) => k).join(', '));
+      const headerKeys = Array.from(headersList.entries()).map(([k]) => k).join(', ');
+      console.warn('[verifyWhopToken] Available headers:', headerKeys);
+      console.warn('[verifyWhopToken] Referer:', headersList.get('referer'));
+      console.warn('[verifyWhopToken] User-Agent:', headersList.get('user-agent'));
       return null;
     }
 
     console.log('[verifyWhopToken] ✅ Token found, length:', whopToken.length);
+    console.log('[verifyWhopToken] Token preview:', whopToken.substring(0, 50) + '...');
 
     // In production, verify the JWT signature
     // For now, we'll decode it (in real app, use jwt.verify)
@@ -103,7 +107,11 @@ export async function verifyWhopToken(token?: string): Promise<WhopUserPayload |
 
     return normalizedPayload;
   } catch (error) {
-    console.error('Failed to verify Whop token:', error);
+    console.error('[verifyWhopToken] ❌ Failed to verify Whop token:', error);
+    if (error instanceof Error) {
+      console.error('[verifyWhopToken] Error message:', error.message);
+      console.error('[verifyWhopToken] Error stack:', error.stack);
+    }
     return null;
   }
 }
@@ -169,7 +177,11 @@ export async function checkUserHasPremiumAccess(userId: string): Promise<boolean
     console.log('[checkUserHasPremiumAccess] ✅ User has premium:', hasPremium);
     return hasPremium;
   } catch (error) {
-    console.error('Error checking premium access:', error);
+    console.error('[checkUserHasPremiumAccess] ❌ Error checking premium access:', error);
+    if (error instanceof Error) {
+      console.error('[checkUserHasPremiumAccess] Error message:', error.message);
+      console.error('[checkUserHasPremiumAccess] Error stack:', error.stack);
+    }
     return false;
   }
 }
