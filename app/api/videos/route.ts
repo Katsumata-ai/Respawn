@@ -92,10 +92,48 @@ export async function POST(request: NextRequest) {
       console.log(`[Upload] ✅ Premium user, skipping upload limit check`);
     }
 
-    // Validate Mux URL
-    if (!muxUrl.includes('stream.mux.com') || !muxUrl.includes('.m3u8')) {
+    // Validate Mux URL with strict pattern matching
+    const muxUrlPattern = /^https:\/\/stream\.mux\.com\/[A-Za-z0-9_-]+\.m3u8\?token=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+    if (!muxUrlPattern.test(muxUrl)) {
+      console.error('[Upload] ❌ Invalid Mux URL format:', muxUrl);
       return NextResponse.json(
-        { error: 'Invalid Mux URL. Must be from stream.mux.com and include .m3u8' },
+        {
+          error: 'Invalid Mux URL format',
+          message: 'The URL must be a valid Mux streaming URL with format: https://stream.mux.com/{PLAYBACK_ID}.m3u8?token={JWT_TOKEN}',
+          example: 'https://stream.mux.com/abc123.m3u8?token=eyJ...'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Additional validation: Check if the URL is accessible
+    try {
+      console.log('[Upload] Validating Mux URL accessibility...');
+      const headResponse = await fetch(muxUrl, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+
+      if (!headResponse.ok) {
+        console.error('[Upload] ❌ Mux URL not accessible:', headResponse.status);
+        return NextResponse.json(
+          {
+            error: 'Invalid or expired Mux URL',
+            message: `The Mux URL returned status ${headResponse.status}. The video may not exist or the token may be expired.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      console.log('[Upload] ✅ Mux URL is valid and accessible');
+    } catch (fetchError) {
+      console.error('[Upload] ❌ Failed to validate Mux URL:', fetchError);
+      return NextResponse.json(
+        {
+          error: 'Failed to validate Mux URL',
+          message: 'Could not verify the Mux URL. Please check that the URL is correct and accessible.',
+        },
         { status: 400 }
       );
     }

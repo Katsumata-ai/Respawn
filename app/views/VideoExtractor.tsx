@@ -142,6 +142,14 @@ export default function VideoExtractor({ onVideoSaved }: { onVideoSaved?: () => 
       return;
     }
 
+    // Validate Mux URL format on client side
+    const muxUrlPattern = /^https:\/\/stream\.mux\.com\/[A-Za-z0-9_-]+\.m3u8\?token=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+    if (!muxUrlPattern.test(muxUrl.trim())) {
+      setError('Invalid Mux URL format. The URL must be from stream.mux.com and include a valid .m3u8 file with a token parameter.');
+      return;
+    }
+
     try {
       const response = await fetch('/api/videos', {
         method: 'POST',
