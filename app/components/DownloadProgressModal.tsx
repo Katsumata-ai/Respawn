@@ -93,49 +93,120 @@ export default function DownloadProgressModal({
           throw new Error(data.error || 'Failed to get download URL');
         }
 
-        // Now download directly from Mux URL
+        // Download HLS stream and convert to MP4
         if (!isMounted) return;
-        setStatus('Downloading from Mux...');
+        setStatus('Downloading HLS stream...');
         setProgress(10);
-        console.log(`[Download] Downloading from Mux URL`);
+        console.log(`[Download] Downloading HLS stream from Mux`);
 
-        const muxResponse = await fetch(data.url, {
-          signal: abortController.signal,
-        });
+        // Load hls.js library
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+        script.onload = async () => {
+          try {
+            // @ts-ignore - hls.js is loaded dynamically
+            const Hls = window.Hls;
 
-        if (!muxResponse.ok) {
-          throw new Error(`Failed to download from Mux: ${muxResponse.status}`);
-        }
-
-        // Get the blob and download it
-        const blob = await muxResponse.blob();
-        console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
-
-        if (isMounted) {
-          setProgress(95);
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${videoTitle}.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-          setProgress(100);
-        }
-
-        if (isMounted) {
-          setStatus('Download complete! ✓');
-          setProgress(100);
-          console.log(`[Download] Download complete!`);
-
-          setTimeout(() => {
-            if (isMounted) {
-              setIsDownloading(false);
-              onClose();
+            if (!Hls.isSupported()) {
+              throw new Error('HLS is not supported in this browser');
             }
-          }, 1500);
-        }
+
+            // Create video element for HLS playback
+            const video = document.createElement('video');
+            const hls = new Hls();
+
+            hls.loadSource(data.url);
+            hls.attachMedia(video);
+
+            // Wait for manifest to load
+            await new Promise<void>((resolve, reject) => {
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                if (isMounted) setProgress(30);
+                resolve();
+              });
+              hls.on(Hls.Events.ERROR, (event: any, data: any) => {
+                reject(new Error(`HLS error: ${data.reason}`));
+              });
+              setTimeout(() => reject(new Error('HLS load timeout')), 30000);
+            });
+
+            // Download all segments
+            if (!isMounted) return;
+            setStatus('Downloading video segments...');
+            setProgress(40);
+
+            const chunks: ArrayBuffer[] = [];
+            let totalSize = 0;
+
+            // Get all segment URLs
+            const segments = hls.levels[0].details?.fragments || [];
+            console.log(`[Download] Found ${segments.length} segments`);
+
+            for (let i = 0; i < segments.length; i++) {
+              if (!isMounted) return;
+
+              const segment = segments[i];
+              const segmentUrl = hls.levels[0].details?.baseUrl + segment.relurl;
+
+              const segmentResponse = await fetch(segmentUrl, {
+                signal: abortController.signal,
+              });
+
+              if (!segmentResponse.ok) {
+                throw new Error(`Failed to download segment ${i}`);
+              }
+
+              const buffer = await segmentResponse.arrayBuffer();
+              chunks.push(buffer);
+              totalSize += buffer.byteLength;
+
+              // Update progress
+              const segmentProgress = 40 + (i / segments.length) * 50;
+              setProgress(segmentProgress);
+              console.log(`[Download] Downloaded segment ${i + 1}/${segments.length}`);
+            }
+
+            // Combine chunks into single blob
+            if (!isMounted) return;
+            setStatus('Converting to MP4...');
+            setProgress(90);
+
+            const blob = new Blob(chunks as BlobPart[], { type: 'video/mp4' });
+            console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
+
+            // Trigger download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${videoTitle}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            // Cleanup
+            hls.destroy();
+
+            if (isMounted) {
+              setStatus('Download complete! ✓');
+              setProgress(100);
+              console.log(`[Download] Download complete!`);
+
+              setTimeout(() => {
+                if (isMounted) {
+                  setIsDownloading(false);
+                  onClose();
+                }
+              }, 1500);
+            }
+          } catch (error) {
+            throw error;
+          }
+        };
+        script.onerror = () => {
+          throw new Error('Failed to load hls.js library');
+        };
+        document.head.appendChild(script);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           console.log('[Download] Download cancelled by user');

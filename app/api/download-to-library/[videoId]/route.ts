@@ -30,16 +30,14 @@ export async function POST(
       );
     }
 
-    // Convert HLS URL to MP4 URL for download
-    // Mux supports both .m3u8 (HLS streaming) and .mp4 (direct download)
-    const mp4Url = video.mux_url.replace('.m3u8', '.mp4');
-
+    // Return the HLS URL for client-side conversion
+    // The client will use hls.js to download and convert HLS to MP4
     return NextResponse.json({
       success: true,
-      type: 'stream',
-      url: mp4Url,
+      type: 'hls',
+      url: video.mux_url,
       title: video.title,
-      message: 'Download URL ready - browser will download MP4 directly from Mux',
+      message: 'Download URL ready - browser will convert HLS to MP4',
     });
   } catch (error) {
     console.error('API error:', error);
