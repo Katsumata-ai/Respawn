@@ -141,19 +141,35 @@ export default function DownloadProgressModal({
 
         const renditionText = await renditionResponse.text();
         console.log(`[Download] Rendition fetched, size: ${renditionText.length} bytes`);
+        console.log(`[Download] ===== RENDITION CONTENT START =====`);
+        console.log(renditionText);
+        console.log(`[Download] ===== RENDITION CONTENT END =====`);
 
         // Parse the rendition to get segment URLs
         const renditionLines = renditionText.split('\n');
         const segments: string[] = [];
         const renditionBaseUrl = renditionUrl.substring(0, renditionUrl.lastIndexOf('/') + 1);
 
-        for (const line of renditionLines) {
-          if (line && !line.startsWith('#') && line.endsWith('.ts')) {
-            // Handle both absolute and relative URLs
-            if (line.startsWith('http')) {
-              segments.push(line);
+        console.log(`[Download] Rendition base URL: ${renditionBaseUrl}`);
+        console.log(`[Download] Total lines in rendition: ${renditionLines.length}`);
+
+        for (let i = 0; i < renditionLines.length; i++) {
+          const line = renditionLines[i];
+          console.log(`[Download] Line ${i}: "${line}"`);
+
+          if (line && !line.startsWith('#')) {
+            console.log(`[Download]   → Non-comment line: "${line}"`);
+
+            if (line.endsWith('.ts')) {
+              console.log(`[Download]   → Found .ts segment!`);
+              // Handle both absolute and relative URLs
+              if (line.startsWith('http')) {
+                segments.push(line);
+              } else {
+                segments.push(renditionBaseUrl + line);
+              }
             } else {
-              segments.push(renditionBaseUrl + line);
+              console.log(`[Download]   → Not a .ts file (ends with: ${line.substring(line.length - 10)})`);
             }
           }
         }
