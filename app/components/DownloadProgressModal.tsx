@@ -47,26 +47,11 @@ export default function DownloadProgressModal({
   }, [progress, displayProgress]);
 
   // Handle modal close - allow user to close even during download
-  const handleClose = async () => {
-    const wasDownloading = isDownloading && progress < 100;
-
+  const handleClose = () => {
     setIsDownloading(false);
     setProgress(0);
     setDisplayProgress(0);
     setStatus('Preparing download...');
-
-    // Clean up incomplete file and cancel download if it was in progress
-    if (wasDownloading) {
-      try {
-        console.log(`[Download] Cancelling download for video: ${videoId}`);
-        await fetch(`/api/download-to-library/${videoId}`, {
-          method: 'DELETE',
-        });
-      } catch (err) {
-        console.error('Failed to cancel download:', err);
-      }
-    }
-
     onClose();
   };
 
@@ -87,150 +72,56 @@ export default function DownloadProgressModal({
       console.log(`[Download] Starting fresh download for video: ${videoId}`);
 
       try {
-        // Always download via the server endpoint
-        // The server will handle both local files and Mux URLs
-        setStatus('Downloading video...');
-        console.log(`[Download] Fetching /api/download/${videoId}`);
+        // Get the Mux URL from the server
+        setStatus('Preparing download...');
+        console.log(`[Download] Fetching Mux URL from /api/download-to-library/${videoId}`);
 
-        const response = await fetch(`/api/download/${videoId}`, { signal: abortController.signal });
+        const response = await fetch(`/api/download-to-library/${videoId}`, {
+          method: 'POST',
+          signal: abortController.signal,
+        });
+
         console.log(`[Download] Response status: ${response.status}`);
-
         if (!response.ok) {
-          throw new Error(`Download failed with status ${response.status}`);
+          throw new Error(`Failed to get download URL: ${response.status}`);
         }
 
-        // Check if response is JSON (Mux URL) or binary (MP4 file)
-        const contentType = response.headers.get('content-type');
-        console.log(`[Download] Content-Type: ${contentType}`);
+        const data = await response.json();
+        console.log(`[Download] Received response:`, data);
 
-        if (contentType?.includes('application/json')) {
-          // Response is JSON with Mux URL - need to download via server
-          const data = await response.json();
-          console.log(`[Download] Received JSON response:`, data);
+        if (!data.success || !data.url) {
+          throw new Error(data.error || 'Failed to get download URL');
+        }
 
-          if (data.type === 'stream' && data.url) {
-            if (!isMounted) return; // Stop if modal closed
-            setStatus('Converting to MP4...');
-            setProgress(5); // Start at 5%
-            console.log(`[Download] Starting server-side conversion`);
+        // Now download directly from Mux URL
+        if (!isMounted) return;
+        setStatus('Downloading from Mux...');
+        setProgress(10);
+        console.log(`[Download] Downloading from Mux URL`);
 
-            // Trigger server-side download via download-to-library endpoint
-            const downloadResponse = await fetch(`/api/download-to-library/${videoId}`, {
-              method: 'POST',
-              signal: abortController.signal,
-            });
+        const muxResponse = await fetch(data.url, {
+          signal: abortController.signal,
+        });
 
-            console.log(`[Download] POST response status: ${downloadResponse.status}`);
-            if (!downloadResponse.ok) {
-              throw new Error('Failed to start download');
-            }
+        if (!muxResponse.ok) {
+          throw new Error(`Failed to download from Mux: ${muxResponse.status}`);
+        }
 
-            const downloadData = await downloadResponse.json();
-            console.log(`[Download] Download started:`, downloadData);
+        // Get the blob and download it
+        const blob = await muxResponse.blob();
+        console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
 
-            if (!downloadData.success) {
-              throw new Error(downloadData.error || 'Failed to start download');
-            }
-
-            // Wait for download to complete
-            if (!isMounted) return; // Stop if modal closed
-            setStatus('Downloading...');
-            let isReady = false;
-            let attempts = 0;
-            const maxAttempts = 1800; // 1 hour timeout (1800 * 2 seconds)
-
-            while (!isReady && attempts < maxAttempts && isMounted) {
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Check every 1 second for more responsive progress
-              attempts++;
-
-              if (!isMounted) break; // Stop if modal closed
-
-              try {
-                const statusResponse = await fetch(`/api/download-to-library/${videoId}`, {
-                  signal: abortController.signal,
-                });
-                if (!statusResponse.ok) {
-                  throw new Error('Failed to check download status');
-                }
-
-                const statusData = await statusResponse.json();
-                console.log(`[Download] Status check (attempt ${attempts}):`, statusData);
-
-                if (statusData.status === 'ready') {
-                  isReady = true;
-                  if (isMounted) {
-                    setProgress(100);
-                  }
-                  console.log(`[Download] Download ready!`);
-                  break;
-                } else if (statusData.status === 'error') {
-                  throw new Error(statusData.error || 'Download failed');
-                } else if (statusData.status === 'downloading') {
-                  // Use actual progress from server for smooth animation
-                  const serverProgress = Math.min(99, Math.round((statusData.progress || 0) * 100) / 100);
-                  if (isMounted && serverProgress > 0) {
-                    setProgress(serverProgress);
-                    setStatus('Downloading...');
-                  }
-                }
-              } catch (err) {
-                if (err instanceof Error && err.name === 'AbortError') {
-                  console.log('[Download] Status check aborted');
-                  break;
-                }
-                throw err;
-              }
-            }
-
-            // Only throw timeout error if modal is still mounted
-            if (!isReady && isMounted) {
-              throw new Error('Download timeout - took too long');
-            }
-
-            // If modal was closed, stop here
-            if (!isMounted) return;
-
-            // Now download the converted file
-            if (!isMounted) return; // Stop if modal closed
-            setStatus('Finalizing download...');
-            console.log(`[Download] Downloading final file`);
-            const finalResponse = await fetch(`/api/download/${videoId}`, {
-              signal: abortController.signal,
-            });
-            if (!finalResponse.ok) {
-              throw new Error('Failed to download file');
-            }
-
-            const blob = await finalResponse.blob();
-            console.log(`[Download] File downloaded, size: ${blob.size} bytes`);
-
-            if (isMounted) {
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${videoTitle}.mp4`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              document.body.removeChild(a);
-            }
-          }
-        } else {
-          // Response is binary MP4 file
-          console.log(`[Download] Received binary MP4 file`);
-          const blob = await response.blob();
-          console.log(`[Download] File size: ${blob.size} bytes`);
-
-          if (isMounted) {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${videoTitle}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-          }
+        if (isMounted) {
+          setProgress(95);
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${videoTitle}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          setProgress(100);
         }
 
         if (isMounted) {
