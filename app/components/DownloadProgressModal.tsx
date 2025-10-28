@@ -141,36 +141,23 @@ export default function DownloadProgressModal({
 
         const renditionText = await renditionResponse.text();
         console.log(`[Download] Rendition fetched, size: ${renditionText.length} bytes`);
-        console.log(`[Download] ===== RENDITION CONTENT START =====`);
-        console.log(renditionText);
-        console.log(`[Download] ===== RENDITION CONTENT END =====`);
 
         // Parse the rendition to get segment URLs
+        // Mux uses .m4s (MPEG-4 Segment) format, not .ts
         const renditionLines = renditionText.split('\n');
         const segments: string[] = [];
-        const renditionBaseUrl = renditionUrl.substring(0, renditionUrl.lastIndexOf('/') + 1);
 
-        console.log(`[Download] Rendition base URL: ${renditionBaseUrl}`);
-        console.log(`[Download] Total lines in rendition: ${renditionLines.length}`);
+        for (const line of renditionLines) {
+          const trimmedLine = line.trim();
 
-        for (let i = 0; i < renditionLines.length; i++) {
-          const line = renditionLines[i];
-          console.log(`[Download] Line ${i}: "${line}"`);
+          // Skip comments and empty lines
+          if (!trimmedLine || trimmedLine.startsWith('#')) {
+            continue;
+          }
 
-          if (line && !line.startsWith('#')) {
-            console.log(`[Download]   → Non-comment line: "${line}"`);
-
-            if (line.endsWith('.ts')) {
-              console.log(`[Download]   → Found .ts segment!`);
-              // Handle both absolute and relative URLs
-              if (line.startsWith('http')) {
-                segments.push(line);
-              } else {
-                segments.push(renditionBaseUrl + line);
-              }
-            } else {
-              console.log(`[Download]   → Not a .ts file (ends with: ${line.substring(line.length - 10)})`);
-            }
+          // Look for .m4s segment files (Mux uses MPEG-4 segments)
+          if (trimmedLine.includes('.m4s')) {
+            segments.push(trimmedLine);
           }
         }
 
