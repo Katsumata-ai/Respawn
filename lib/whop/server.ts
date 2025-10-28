@@ -205,19 +205,5 @@ export async function checkUserAccess(userId: string): Promise<WhopAccessCheckRe
   }
 }
 
-/**
- * Get user upload limit based on membership status
- * Free users: 3 uploads
- * Premium users: unlimited
- */
-export async function getUserUploadLimit(userId: string): Promise<number> {
-  try {
-    const hasPremium = await checkUserHasPremiumAccess(userId);
-    // Free users: 3 uploads, Premium users: unlimited (return large number)
-    return hasPremium ? 999999 : 3;
-  } catch (error) {
-    console.error('Failed to get user upload limit:', error);
-    return 3; // Default to free limit on error
-  }
-}
+
 

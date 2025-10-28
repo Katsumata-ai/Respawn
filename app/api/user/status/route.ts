@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyWhopToken, checkUserHasPremiumAccess, getUserUploadLimit } from '@/lib/whop/server';
-import { getUserUploadCount } from '@/lib/whop/upload-tracker';
+import { verifyWhopToken, checkUserHasPremiumAccess } from '@/lib/whop/server';
+import { getSupabaseClient } from '@/lib/supabase/client';
+
+const FREE_UPLOAD_LIMIT = 3;
 
 /**
  * Check user's premium status using Whop API
- * Returns upload count from in-memory tracker
+ * Returns upload count by counting videos in Supabase
  */
 export async function GET(request: NextRequest) {
   try {
@@ -22,8 +24,24 @@ export async function GET(request: NextRequest) {
 
     // Check if user has premium access using Whop API
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
-    const uploadLimit = await getUserUploadLimit(whopUserId);
-    const uploadCount = getUserUploadCount(whopUserId);
+
+    // Count user's videos from Supabase
+    const supabase = getSupabaseClient();
+    const { count, error: countError } = await supabase
+      .from('videos')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', whopUserId);
+
+    if (countError) {
+      console.error('[Status] Error counting videos:', countError);
+      return NextResponse.json(
+        { error: 'Failed to fetch user status' },
+        { status: 500 }
+      );
+    }
+
+    const uploadCount = count || 0;
+    const uploadLimit = FREE_UPLOAD_LIMIT;
 
     console.log(`[Status] User ${whopUserId}: hasPremium=${hasPremium}, uploadCount=${uploadCount}/${uploadLimit}`);
 

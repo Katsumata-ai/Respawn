@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DownloadService } from '@/lib/download/service';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { verifyWhopToken, checkUserHasPremiumAccess, getUserUploadLimit } from '@/lib/whop/server';
-import { getUserUploadCount, incrementUserUploadCount } from '@/lib/whop/upload-tracker';
+import { verifyWhopToken, checkUserHasPremiumAccess } from '@/lib/whop/server';
 import { v4 as uuidv4 } from 'uuid';
+
+const FREE_UPLOAD_LIMIT = 3;
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,28 +40,41 @@ export async function POST(request: NextRequest) {
 
     // Check if user has premium access using Whop API
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
-    const uploadLimit = await getUserUploadLimit(whopUserId);
 
-    // If user is FREE, check upload limit
+    // If user is FREE, check upload limit by counting videos in Supabase
     if (!hasPremium) {
-      const currentUploadCount = getUserUploadCount(whopUserId);
-      console.log(`[Upload] User ${whopUserId} upload count: ${currentUploadCount}/${uploadLimit}`);
+      const supabase = getSupabaseClient();
+      const { count, error: countError } = await supabase
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', whopUserId);
+
+      if (countError) {
+        console.error('[Upload] Error counting videos:', countError);
+        return NextResponse.json(
+          { error: 'Failed to check upload limit' },
+          { status: 500 }
+        );
+      }
+
+      const currentUploadCount = count || 0;
+      console.log(`[Upload] User ${whopUserId} upload count: ${currentUploadCount}/${FREE_UPLOAD_LIMIT}`);
 
       // Check if user has reached upload limit
-      if (currentUploadCount >= uploadLimit) {
+      if (currentUploadCount >= FREE_UPLOAD_LIMIT) {
         console.log(`[Upload] User has reached upload limit`);
         return NextResponse.json(
           {
             error: 'Upload limit reached',
-            message: `Free users can upload up to ${uploadLimit} videos. Upgrade to premium for unlimited uploads.`,
-            limit: uploadLimit,
+            message: `Free users can upload up to ${FREE_UPLOAD_LIMIT} videos. Upgrade to premium for unlimited uploads.`,
+            limit: FREE_UPLOAD_LIMIT,
             current: currentUploadCount
           },
           { status: 403 }
         );
       }
 
-      console.log(`[Upload] User can upload (${currentUploadCount}/${uploadLimit})`);
+      console.log(`[Upload] User can upload (${currentUploadCount}/${FREE_UPLOAD_LIMIT})`);
     }
 
     // Validate Mux URL
@@ -88,12 +102,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Upload] Video uploaded successfully for user ${whopUserId}`);
-
-    // Increment upload counter for free users (only after successful upload)
-    if (!hasPremium) {
-      const newCount = incrementUserUploadCount(whopUserId);
-      console.log(`[Upload] Incremented upload count for user ${whopUserId}: ${newCount}/${uploadLimit}`);
-    }
 
     return NextResponse.json({
       ...result,
