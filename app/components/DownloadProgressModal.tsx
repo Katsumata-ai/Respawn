@@ -110,15 +110,22 @@ export default function DownloadProgressModal({
 
         const playlistText = await playlistResponse.text();
         console.log(`[Download] Playlist fetched, size: ${playlistText.length} bytes`);
+        console.log(`[Download] Playlist content (first 500 chars):`, playlistText.substring(0, 500));
 
         // Parse the playlist to get segment URLs
         const lines = playlistText.split('\n');
         const segments: string[] = [];
         const baseUrl = data.url.substring(0, data.url.lastIndexOf('/') + 1);
 
+        console.log(`[Download] Base URL: ${baseUrl}`);
+        console.log(`[Download] Total lines in playlist: ${lines.length}`);
+
         for (const line of lines) {
-          if (line && !line.startsWith('#') && line.endsWith('.ts')) {
-            segments.push(baseUrl + line);
+          if (line && !line.startsWith('#')) {
+            console.log(`[Download] Processing line: "${line}"`);
+            if (line.endsWith('.ts')) {
+              segments.push(baseUrl + line);
+            }
           }
         }
 
