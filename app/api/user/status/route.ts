@@ -25,25 +25,26 @@ export async function GET(request: NextRequest) {
     // Check if user has premium access using Whop API
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
 
-    // Count user's videos from Supabase
+    // Get max_videos_uploaded from user_upload_stats (never decreases)
     const supabase = getSupabaseClient();
-    const { count, error: countError } = await supabase
-      .from('videos')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', whopUserId);
+    const { data: statsData, error: statsError } = await supabase
+      .from('user_upload_stats')
+      .select('max_videos_uploaded')
+      .eq('user_id', whopUserId)
+      .single();
 
-    if (countError) {
-      console.error('[Status] Error counting videos:', countError);
+    if (statsError && statsError.code !== 'PGRST116') {
+      console.error('[Status] Error fetching upload stats:', statsError);
       return NextResponse.json(
         { error: 'Failed to fetch user status' },
         { status: 500 }
       );
     }
 
-    const uploadCount = count || 0;
+    const uploadCount = statsData?.max_videos_uploaded || 0;
     const uploadLimit = FREE_UPLOAD_LIMIT;
 
-    console.log(`[Status] User ${whopUserId}: hasPremium=${hasPremium}, uploadCount=${uploadCount}/${uploadLimit}`);
+    console.log(`[Status] User ${whopUserId}: hasPremium=${hasPremium}, uploadCount=${uploadCount}/${uploadLimit} (lifetime max)`);
 
     return NextResponse.json({
       userId: whopUserId,

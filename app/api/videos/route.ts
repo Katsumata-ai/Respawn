@@ -46,43 +46,48 @@ export async function POST(request: NextRequest) {
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);
     console.log(`[Upload] hasPremium: ${hasPremium}`);
 
-    // If user is FREE, check upload limit by counting videos in Supabase
+    // Get current stats for free users (needed for both check and update)
+    const supabase = getSupabaseClient();
+    let currentMaxVideos = 0;
+
+    // If user is FREE, check upload limit using max_videos_uploaded (never decreases)
     if (!hasPremium) {
-      const supabase = getSupabaseClient();
-      console.log(`[Upload] Counting videos for user: "${whopUserId}"`);
+      console.log(`[Upload] Checking max videos uploaded for user: "${whopUserId}"`);
 
-      const { count, error: countError } = await supabase
-        .from('videos')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', whopUserId);
+      // Get max_videos_uploaded from user_upload_stats
+      const { data: statsData, error: statsError } = await supabase
+        .from('user_upload_stats')
+        .select('max_videos_uploaded')
+        .eq('user_id', whopUserId)
+        .single();
 
-      if (countError) {
-        console.error('[Upload] ❌ Error counting videos:', countError);
+      if (statsError && statsError.code !== 'PGRST116') {
+        console.error('[Upload] ❌ Error fetching upload stats:', statsError);
         return NextResponse.json(
-          { error: 'Failed to check upload limit', details: countError },
+          { error: 'Failed to check upload limit', details: statsError },
           { status: 500 }
         );
       }
 
-      const currentUploadCount = count || 0;
-      console.log(`[Upload] ✅ User "${whopUserId}" has ${currentUploadCount}/${FREE_UPLOAD_LIMIT} videos`);
+      currentMaxVideos = statsData?.max_videos_uploaded || 0;
+      console.log(`[Upload] ✅ User "${whopUserId}" has uploaded max ${currentMaxVideos}/${FREE_UPLOAD_LIMIT} videos (lifetime)`);
 
-      // Check if user has reached upload limit
-      if (currentUploadCount >= FREE_UPLOAD_LIMIT) {
-        console.log(`[Upload] ❌ User has reached upload limit`);
+      // Check if user has reached upload limit (based on max ever uploaded, not current count)
+      if (currentMaxVideos >= FREE_UPLOAD_LIMIT) {
+        console.log(`[Upload] ❌ User has reached lifetime upload limit`);
         return NextResponse.json(
           {
             error: 'Upload limit reached',
             message: `Free users can upload up to ${FREE_UPLOAD_LIMIT} videos. Upgrade to premium for unlimited uploads.`,
             limit: FREE_UPLOAD_LIMIT,
-            current: currentUploadCount,
+            current: currentMaxVideos,
             userId: whopUserId
           },
           { status: 403 }
         );
       }
 
-      console.log(`[Upload] ✅ User can upload (${currentUploadCount}/${FREE_UPLOAD_LIMIT})`);
+      console.log(`[Upload] ✅ User can upload (${currentMaxVideos}/${FREE_UPLOAD_LIMIT})`);
     } else {
       console.log(`[Upload] ✅ Premium user, skipping upload limit check`);
     }
@@ -112,6 +117,30 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Upload] Video uploaded successfully for user ${whopUserId}`);
+
+    // Update max_videos_uploaded for free users (increment by 1, never decreases)
+    if (!hasPremium) {
+      const newMaxCount = currentMaxVideos + 1;
+
+      console.log(`[Upload] Updating max_videos_uploaded to ${newMaxCount} for user ${whopUserId}`);
+
+      const { error: updateError } = await supabase
+        .from('user_upload_stats')
+        .upsert({
+          user_id: whopUserId,
+          max_videos_uploaded: newMaxCount,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (updateError) {
+        console.error('[Upload] ⚠️ Failed to update max_videos_uploaded:', updateError);
+        // Don't fail the upload, just log the error
+      } else {
+        console.log(`[Upload] ✅ Updated max_videos_uploaded to ${newMaxCount}`);
+      }
+    }
 
     return NextResponse.json({
       ...result,
@@ -172,7 +201,19 @@ export async function GET(request: NextRequest) {
       shareableId: video.shareable_id,
     }));
 
-    return NextResponse.json({ videos });
+    // Get max_videos_uploaded for the count display (never decreases)
+    const { data: statsData } = await supabase
+      .from('user_upload_stats')
+      .select('max_videos_uploaded')
+      .eq('user_id', whopUserId)
+      .single();
+
+    const maxVideosUploaded = statsData?.max_videos_uploaded || videos.length;
+
+    return NextResponse.json({
+      videos,
+      maxVideosUploaded // Include this for the frontend to display correct count
+    });
   } catch (error) {
     console.error('Error in GET /api/videos:', error);
     return NextResponse.json(
