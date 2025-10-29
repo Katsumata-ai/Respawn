@@ -13,25 +13,36 @@ export default function MuxLinkModal({ isOpen, onClose }: MuxLinkModalProps) {
   const steps = [
     {
       number: 1,
-      title: 'Capture the Mux URL',
+      title: 'Open DevTools and Prepare',
       items: [
-        'Open the video on Whop',
-        'Press F12 to open DevTools',
-        'Go to the Network tab',
-        'Play the video',
-        'Filter by "m3u8"',
-        'Copy the link: https://stream.mux.com/...m3u8?token=...',
+        'Open the video page on Whop (the course you want to download)',
+        'Press F12 to open DevTools (or right-click → Inspect)',
+        'Click on the "Network" tab at the top of DevTools',
+        'In the filter box, type: m3u8',
+        'Keep DevTools open for the next steps',
       ],
     },
     {
       number: 2,
+      title: 'Capture the Mux Link',
+      items: [
+        'Reload the page (press F5 or Ctrl+R)',
+        'Play the video that you want to download',
+        'Wait 2-3 seconds for the video to start playing',
+        'Look in the Network tab - you\'ll see a request appear',
+        'Click on the request that contains "stream.mux.com"',
+        'Copy the full URL that looks like: https://stream.mux.com/xxxxx.m3u8?token=xxxxx',
+      ],
+    },
+    {
+      number: 3,
       title: 'Use in Downloader',
       items: [
-        'Paste the Mux link into the app',
-        'Add a title for your video',
+        'Paste the Mux link into the app input field',
+        'Add a descriptive title for your video',
         'Click "Download & Save Video"',
         'Video saves instantly to the cloud',
-        'Watch, share, or download locally',
+        'Watch, share, or download locally anytime',
       ],
     },
   ];
@@ -66,17 +77,31 @@ export default function MuxLinkModal({ isOpen, onClose }: MuxLinkModalProps) {
 
         {/* Intro */}
         <div
-          className="p-4 rounded-2xl mb-8"
+          className="p-5 rounded-2xl mb-8"
           style={{
             backgroundColor: '#1a1a1a',
             border: '1px solid #2B2B2B',
           }}
         >
-          <p style={{ color: '#FFFFFF', marginBottom: '8px', fontWeight: '500' }}>
+          <p style={{ color: '#FFFFFF', marginBottom: '12px', fontWeight: '600', fontSize: '16px' }}>
             What is a Mux Link?
           </p>
-          <p style={{ color: '#AAAAAA', lineHeight: '1.6' }}>
-            Whop uses Mux to serve videos. A Mux link is the direct URL to the video stream that allows you to save it permanently to the cloud and download it locally as a clean MP4 file.
+          <p style={{ color: '#AAAAAA', lineHeight: '1.7', marginBottom: '12px' }}>
+            Whop uses Mux to serve videos. A Mux link is the direct URL to the video stream. It looks like this:
+          </p>
+          <div
+            className="p-3 rounded-lg font-mono text-xs"
+            style={{
+              backgroundColor: '#0a0a0a',
+              color: '#FF8102',
+              overflowX: 'auto',
+              border: '1px solid #2B2B2B',
+            }}
+          >
+            https://stream.mux.com/xxxxx.m3u8?token=xxxxx
+          </div>
+          <p style={{ color: '#AAAAAA', lineHeight: '1.7', marginTop: '12px' }}>
+            This link allows you to save videos permanently to the cloud and download them locally as clean MP4 files.
           </p>
         </div>
 
@@ -119,33 +144,36 @@ export default function MuxLinkModal({ isOpen, onClose }: MuxLinkModalProps) {
 
         {/* Warning 1 */}
         <div
-          className="p-4 rounded-2xl mb-4"
+          className="p-5 rounded-2xl mb-4"
           style={{
             backgroundColor: 'rgba(239, 68, 68, 0.05)',
             border: '1px solid #EF4444',
           }}
         >
-          <p style={{ color: '#EF4444', fontWeight: '500', marginBottom: '4px' }}>
-            Time-Limited Token
+          <p style={{ color: '#EF4444', fontWeight: '600', marginBottom: '8px', fontSize: '15px' }}>
+            ⚠️ Time-Limited Token
           </p>
-          <p style={{ color: '#AAAAAA', fontSize: '14px' }}>
-            The Mux link contains a time-limited token. If it stops working, simply capture a fresh one by repeating the steps above.
+          <p style={{ color: '#CCCCCC', fontSize: '14px', lineHeight: '1.6' }}>
+            The Mux link contains a time-limited token that expires after a few hours. If the link stops working or shows an error, simply capture a fresh one by repeating the steps above. This is normal and takes only 30 seconds.
           </p>
         </div>
 
         {/* Warning 2 */}
         <div
-          className="p-4 rounded-2xl mb-8"
+          className="p-5 rounded-2xl mb-8"
           style={{
             backgroundColor: 'rgba(239, 68, 68, 0.05)',
             border: '1px solid #EF4444',
           }}
         >
-          <p style={{ color: '#EF4444', fontWeight: '500', marginBottom: '4px' }}>
-            Multiple Mux Links in Playlists
+          <p style={{ color: '#EF4444', fontWeight: '600', marginBottom: '8px', fontSize: '15px' }}>
+            ⚠️ Multiple Videos in Playlists
           </p>
-          <p style={{ color: '#AAAAAA', fontSize: '14px' }}>
-            For videos inside playlists, the Network tab may show multiple Mux links. Test each one to find the correct video. Look for the link that matches the video you want to download.
+          <p style={{ color: '#CCCCCC', fontSize: '14px', lineHeight: '1.6', marginBottom: '8px' }}>
+            If you're downloading from a playlist or course with multiple videos, the Network tab may show several Mux links at once.
+          </p>
+          <p style={{ color: '#CCCCCC', fontSize: '14px', lineHeight: '1.6' }}>
+            <strong style={{ color: '#FFFFFF' }}>Solution:</strong> Make sure to play ONLY the video you want to download. The most recent link that appears after clicking play is usually the correct one. You can also check the file size in the Network tab to identify the right video.
           </p>
         </div>
 
