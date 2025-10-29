@@ -1,84 +1,89 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { headers } from 'next/headers';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { verifyWhopToken } from '@/lib/whop/server';
 
 /**
  * Dashboard View - Analytics and statistics
  * Shows community admin dashboard with app analytics
  * Path: /dashboard/[companyId]
+ *
+ * IMPORTANT: This is a SERVER component as per Whop documentation
+ * https://docs.whop.com/apps/guides/app-views#dashboard-view
  */
 
 interface DashboardStats {
-  totalUsers: number;
-  totalDownloads: number;
-  totalRevenue: number;
-  activeUsers: number;
+  totalVideos: number;
+  uniqueUsers: number;
 }
 
-export default function DashboardPage() {
-  const params = useParams();
-  const companyId = params.companyId as string;
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalUsers: 0,
-    totalDownloads: 0,
-    totalRevenue: 0,
-    activeUsers: 0,
-  });
-  const [error, setError] = useState<string | null>(null);
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ companyId: string }>;
+}) {
+  const { companyId } = await params;
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        // Check if user is admin
-        const adminResponse = await fetch('/api/whop/user');
-        if (adminResponse.ok) {
-          const userData = await adminResponse.json();
-          // In a real app, check if user is admin of this company
-          setIsAdmin(true);
-        }
+  // Verify user token and check admin access
+  const payload = await verifyWhopToken();
 
-        // Load dashboard stats
-        const statsResponse = await fetch('/api/dashboard/stats');
-        if (statsResponse.ok) {
-          const data = await statsResponse.json();
-          setStats(data);
-        }
-      } catch (err) {
-        console.error('Dashboard load error:', err);
-        setError('Failed to load dashboard');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadDashboard();
-  }, []);
-
-  if (isLoading) {
+  if (!payload) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
+          <h1 className="text-2xl font-bold mb-4 text-gray-900">Authentication Required</h1>
+          <p className="text-gray-600">
+            Please authenticate to access the dashboard.
+          </p>
         </div>
       </div>
     );
   }
 
+  // Check if user is admin of this company
+  // Note: In production, you should verify the user has admin access to this specific company
+  // For now, we allow any authenticated user to view the dashboard
+  const isAdmin = true; // TODO: Implement proper admin check with Whop API
+
   if (!isAdmin) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+          <h1 className="text-2xl font-bold mb-4 text-gray-900">Access Denied</h1>
           <p className="text-gray-600">
-            Only community admins can access the dashboard.
+            Only company admins can access the dashboard.
           </p>
         </div>
       </div>
     );
+  }
+
+  // Fetch dashboard stats
+  let stats: DashboardStats = {
+    totalVideos: 0,
+    uniqueUsers: 0,
+  };
+
+  try {
+    const supabase = getSupabaseClient();
+
+    // Get total videos uploaded
+    const { count: totalVideos } = await supabase
+      .from('videos')
+      .select('*', { count: 'exact', head: true });
+
+    // Get unique users who uploaded videos
+    const { data: videosByUser } = await supabase
+      .from('videos')
+      .select('user_id');
+
+    const uniqueUsers = new Set(videosByUser?.map((v: any) => v.user_id) || []).size;
+
+    stats = {
+      totalVideos: totalVideos || 0,
+      uniqueUsers: uniqueUsers || 0,
+    };
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
   }
 
   return (
@@ -91,48 +96,40 @@ export default function DashboardPage() {
           <p className="text-gray-600 mt-2">
             Company ID: {companyId}
           </p>
+          <p className="text-sm text-gray-500 mt-1">
+            User: {payload.sub}
+          </p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700">{error}</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total Users Card */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Total Videos Card */}
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-gray-500 text-sm font-medium">Total Users</div>
+            <div className="text-gray-500 text-sm font-medium">Total Videos</div>
             <div className="text-3xl font-bold text-gray-900 mt-2">
-              {stats.totalUsers}
+              {stats.totalVideos}
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Videos uploaded by all users
+            </p>
           </div>
 
-          {/* Active Users Card */}
+          {/* Unique Users Card */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-gray-500 text-sm font-medium">Active Users</div>
             <div className="text-3xl font-bold text-gray-900 mt-2">
-              {stats.activeUsers}
+              {stats.uniqueUsers}
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Users who have uploaded videos
+            </p>
           </div>
+        </div>
 
-          {/* Total Downloads Card */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-gray-500 text-sm font-medium">
-              Total Downloads
-            </div>
-            <div className="text-3xl font-bold text-gray-900 mt-2">
-              {stats.totalDownloads}
-            </div>
-          </div>
-
-          {/* Total Revenue Card */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-gray-500 text-sm font-medium">Total Revenue</div>
-            <div className="text-3xl font-bold text-gray-900 mt-2">
-              €{stats.totalRevenue.toFixed(2)}
-            </div>
-          </div>
+        <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-800">
+            <strong>Note:</strong> User membership and revenue statistics are managed by Whop.
+            This dashboard shows video-related metrics only.
+          </p>
         </div>
       </div>
     </div>
