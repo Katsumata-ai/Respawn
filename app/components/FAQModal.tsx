@@ -166,24 +166,6 @@ export default function FAQModal({ isOpen, onClose }: FAQModalProps) {
             Send a Support Ticket
           </a>
         </div>
-
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="w-full mt-8 py-3 rounded-xl font-semibold transition"
-          style={{
-            backgroundColor: '#FF8102',
-            color: '#161616',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#FF6B00';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#FF8102';
-          }}
-        >
-          Close
-        </button>
       </div>
     </div>
   );
