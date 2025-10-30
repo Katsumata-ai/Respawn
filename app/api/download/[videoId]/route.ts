@@ -53,6 +53,14 @@ export async function GET(
       );
     }
 
+    // Verify the video belongs to the current user
+    if (video.user_id !== whopUserId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - You can only download your own videos' },
+        { status: 403 }
+      );
+    }
+
     const videoFileName = `${videoId}.mp4`;
     const videoPath = path.join(process.cwd(), 'public', 'videos', videoFileName);
 

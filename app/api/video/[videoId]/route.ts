@@ -42,6 +42,14 @@ export async function GET(
       );
     }
 
+    // Verify the video belongs to the current user
+    if (data.user_id !== payload.userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized - You can only access your own videos' },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching video:', error);

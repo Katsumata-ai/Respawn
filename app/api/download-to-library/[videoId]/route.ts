@@ -43,6 +43,14 @@ export async function POST(
       );
     }
 
+    // Verify the video belongs to the current user
+    if (video.user_id !== payload.userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - You can only download your own videos' },
+        { status: 403 }
+      );
+    }
+
     // Return the HLS URL for client-side conversion
     // The client will use hls.js to download and convert HLS to MP4
     return NextResponse.json({
