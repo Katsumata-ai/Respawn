@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { getSupabaseClient, setSupabaseUserId } from '@/lib/supabase/client';
 import { verifyWhopToken } from '@/lib/whop/server';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -33,6 +33,10 @@ export async function GET(
     }
 
     const whopUserId = payload.userId;
+
+    // Set the user ID for RLS policies
+    await setSupabaseUserId(whopUserId);
+
     const supabase = getSupabaseClient();
 
     // Get video metadata from database

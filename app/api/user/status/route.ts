@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyWhopToken, checkUserHasPremiumAccess } from '@/lib/whop/server';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { getSupabaseClient, setSupabaseUserId } from '@/lib/supabase/client';
 
 const FREE_UPLOAD_LIMIT = 3;
 
@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
     }
 
     const whopUserId = payload.userId;
+
+    // Set the user ID for RLS policies
+    await setSupabaseUserId(whopUserId);
 
     // Check if user has premium access using Whop API
     const hasPremium = await checkUserHasPremiumAccess(whopUserId);

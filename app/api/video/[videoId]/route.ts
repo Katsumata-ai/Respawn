@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { getSupabaseClient, setSupabaseUserId } from '@/lib/supabase/client';
+import { verifyWhopToken } from '@/lib/whop/server';
 
 export async function GET(
   request: NextRequest,
@@ -14,6 +15,18 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    // Verify user is authenticated
+    const payload = await verifyWhopToken();
+    if (!payload || !payload.userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Set the user ID for RLS policies
+    await setSupabaseUserId(payload.userId);
 
     const supabase = getSupabaseClient();
     const { data, error } = await supabase

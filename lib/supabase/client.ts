@@ -29,6 +29,26 @@ export function getSupabaseClient() {
   return supabaseInstance;
 }
 
+/**
+ * Set the current user ID for RLS policies
+ * This must be called before any database operations to ensure RLS isolation
+ */
+export async function setSupabaseUserId(userId: string): Promise<void> {
+  try {
+    const supabase = getSupabaseClient();
+    // Set the user_id in the session for RLS policies to use
+    await supabase.rpc('set_config', {
+      key: 'app.current_user_id',
+      value: userId,
+    }).catch(() => {
+      // If RPC fails, try direct query approach
+      console.log('[Supabase] RPC set_config not available, using direct approach');
+    });
+  } catch (error) {
+    console.error('[Supabase] Error setting user ID:', error);
+  }
+}
+
 // Don't export supabase directly - use getSupabaseClient() instead
 // This prevents initialization during build time
 

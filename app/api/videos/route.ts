@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DownloadService } from '@/lib/download/service';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { getSupabaseClient, setSupabaseUserId } from '@/lib/supabase/client';
 import { verifyWhopToken, checkUserHasPremiumAccess } from '@/lib/whop/server';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -40,6 +40,9 @@ export async function POST(request: NextRequest) {
     const shareableId = uuidv4();
 
     console.log(`[Upload] whopUserId: "${whopUserId}" (type: ${typeof whopUserId})`);
+
+    // Set the user ID for RLS policies
+    await setSupabaseUserId(whopUserId);
 
     // Check if user has premium access using Whop API
     console.log('[Upload] Checking premium access...');
@@ -210,6 +213,10 @@ export async function GET(request: NextRequest) {
     }
 
     const whopUserId = payload.userId;
+
+    // Set the user ID for RLS policies
+    await setSupabaseUserId(whopUserId);
+
     const supabase = getSupabaseClient();
 
     // Get videos for THIS user only
